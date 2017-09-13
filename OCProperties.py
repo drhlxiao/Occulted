@@ -64,13 +64,23 @@ class OCProperties(object):
  
         if not legacy:
             #read attributes from csv file (can just restore the pickle file otherwise. Build this into OCFlare class):
+            import pandas as pd
+            if filename: #it's the big one
+                data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
+                #i=self.get_index(ID,data) #get the index of the flare if it's in a list
+                for key in data.keys(): #only do this if it starts with Observation
+                    if key.startswith('Properties.'):
+                        dat=data[key]
+                        key=key[key.find('.')+1:] #trim it
+                        setattr(self,key,dat.values[0])
+                #self.string_to_dict() #ast doesn't like my data for some reason... the coordinate pairs?
             if not filename:
                 filename= '/Users/wheatley/Documents/Solar/occulted_flares/flare_lists/'+str(ID)+'OCProperties.csv'#default file to read - need an except in case it doesn't exist
-            import pandas as pd
-            data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
-            i=self.get_index(ID,data) #get the index of the flare if it's in a list
-            for att,key in zip(tags,tags):
-                self.setattr(att,data[key])
+                data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
+                i=self.get_index(ID,data) #get the index of the flare if it's in a list
+                for key in data.keys():
+                    setattr(self,key,data.values[0])
+                #self.string_to_dict()
 
         if calc_missing: #caluclate missing values if possible
             self.get_T_EM(ID)
@@ -82,8 +92,24 @@ class OCProperties(object):
 
     def get_index(self,ID,data):
         '''Get index of flare in flare list file'''
-        i= np.where(ID == data['ID'])
-        return i[0][0]
+        try:
+            i= np.where(ID == np.array(data['ID']))
+            i=i[0]
+        except TypeError:
+            i= np.searchsorted(np.array(datadata['ID']), ID)
+        return i[0]
+
+
+
+    def string_to_dict(self):
+        '''convert any string dictionaries to proper dictionaries'''
+        import ast
+        #check what's a dictionary
+        d=dir(self)
+        for att in d:
+            attv=getattr(self,att)
+            if type(attv) == str and attv.startswith('{'):
+                setattr(self,att,ast.literal_eval(attv))
     
     def write(self, picklename=False):
         '''Write object to pickle'''

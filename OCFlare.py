@@ -10,6 +10,10 @@ import glob
 import pickle
 import sunpy.map
 from datetime import datetime as dt
+import os
+import matplotlib.pyplot as plt
+import astropy.units as u
+from astropy.coordinates import SkyCoord
 
 import OCDatetimes as ocd
 import OCFiles as ocf
@@ -29,10 +33,21 @@ class OCFlare(object):
             Method for translating between pickle, .sav and .csv
         A list of OCFlare objects will comprise an OCFlareList object, which will include all the plotting methods
      '''
-    def __init__(self, ID, legacy=True, calc_times=False, calc_missing=False,gen=False):
+    def __init__(self, ID, legacy=True, calc_times=False, calc_missing=False,gen=False,from_csv=False):
         '''Initialize the flare object from an ID, pickle files in given folder, or legacy .csv or .sav'''
         self.ID=ID
         #first see if we can just restore the objects from pickles...
+        if not legacy:
+            ppath='/Users/wheatley/Documents/Solar/occulted_flares/flare_lists/'+str(ID)+'.p'
+            ispickle=glob.glob(ppath)
+            if ispickle !=[]:
+                if raw_input('Found object pickle for flare ' + str(ID) + ' modified on ' + dt.fromtimestamp(os.path.getmtime(ppath)).strftime('%Y-%m-%d %H:%M:%S') +', reload?') == 'Y':
+                    self=pickle.load(open(ispickle[0],'rb'))
+                    return
+        if from_csv: #the input is a filename
+            filename=from_csv
+        else:
+            filename=False
         pickles=sorted(glob.glob(str(ID)+'*.p')) #might want to make a special directory for these
         if pickles:
             for p in pickles:
@@ -56,42 +71,70 @@ class OCFlare(object):
                 else:
                     self.Observations=oco.OCObservations(ID,legacy=legacy)                               
         else:
-            self.Datetimes=ocd.OCDatetimes(ID,legacy=legacy,calc_times=calc_times)
-            self.Properties=ocp.OCProperties(ID,legacy=legacy,calc_missing=calc_missing)
-            self.Files=ocf.OCFiles(ID,legacy=legacy)
-            self.Observation=oco.OCObservation(ID,legacy=legacy)
+            self.Datetimes=ocd.OCDatetimes(ID,legacy=legacy,calc_times=calc_times,filename=filename)
+            self.Properties=ocp.OCProperties(ID,legacy=legacy,calc_missing=calc_missing,filename=filename)
+            self.Files=ocf.OCFiles(ID,legacy=legacy,filename=filename)
+            self.Observation=oco.OCObservation(ID,legacy=legacy,filename=filename)
             self.Notes= [""]
+            self.extract_stereo_times()
         
-    def export2csv(self, filename):
+    def export2csv(self, filename=False):
         '''Exports Python dictionary to csv file'''
-        #from pandas.io.json import json_normalize
-        #json_normalize(self.__dict__).to_csv(filename) #flattens the dictionaries so it looks ok in a spreadsheet... only it does this wrong!
+        #first get the dictionaries:
+        dtd=self.Datetimes.__dict__
+        fd=self.Files.__dict__
+        od=self.Observation.__dict__
+        pd=self.Properties.__dict__
+        #deal with special cases...is loop a dictionary too?
+        rd=self.Files.Raw
+        folderd=self.Files.folders
 
-        #first flatten the dictionaries - I should write a function to do this later:
-        self.Data_properties['csv_name']=np.repeat(filename,len(self.ID))
-        self.format_datetimes()
-        #print self.Datetimes['Messenger_datetimes'][0:10]
-        d=self.__dict__
-        headers = ['ID','Messenger_datetimes','RHESSI_datetimes','Obs_start_time','Obs_end_time','Messenger_T','Messenger_EM1','Messenger_GOES','Messenger_total_counts','RHESSI_GOES','GOES_GOES','RHESSI_total_counts','Location','source_vis','Messenger_data_path','RHESSI_data_path','XRS_files','QL_images','RHESSI_browser_urls','csv_name','good_det','Angle','Notes']
-        #zip them all together
-        rows = zip(d['ID'],
-                   d['Datetimes']['Messenger_datetimes'],d['Datetimes']['RHESSI_datetimes'],
-                   d['Datetimes']['Obs_start_time'],d['Datetimes']['Obs_end_time'],
-                   d['Flare_properties']['Messenger_T'],d['Flare_properties']['Messenger_EM1'],
-                   d['Flare_properties']['Messenger_GOES'],d['Flare_properties']['Messenger_total_counts'],
-                   d['Flare_properties']['RHESSI_GOES'],d['Flare_properties']['GOES_GOES'],d['Flare_properties']['RHESSI_total_counts'],
-                   d['Flare_properties']['Location'],d['Flare_properties']['source_vis'],
-                   d['Data_properties']['Messenger_data_path'],d['Data_properties']['RHESSI_data_path'],
-                   d['Data_properties']['XRS_files'],d['Data_properties']['QL_images'],
-                   d['Data_properties']['RHESSI_browser_urls'],d['Data_properties']['csv_name'],d['Data_properties']['good_det'],
-                   d['Angle'],d['Notes'])
-
+        #create headers
+        headers=['ID','Notes']
+        for key in dtd.keys():
+            headers.append('Datetimes.'+key)
+        for key in fd.keys():
+            headers.append('Files.'+key)
+        for key in rd.keys():
+            headers.append('Files.Raw.'+key)
+        for key in folderd.keys():
+            headers.append('Files.folders.'+key)
+        for key in od.keys():
+            headers.append('Observation.'+key)
+        for key in pd.keys():
+            headers.append('Properties.'+key)
+        
+        #gather attributes...
+        attlist=[[self.ID],self.Notes]
+        for val in dtd.values(): #why can't I do the same thing using generators?
+            attlist.append([val])
+        #attlist.append([dtd[key]] for key in dtd.keys())
+        for val in fd.values():
+            attlist.append([val])
+        for val in rd.values():
+            attlist.append([val])
+        for val in folderd.values():
+            attlist.append([val])
+        for val in od.values():
+            attlist.append([val])
+        for val in pd.values():
+            attlist.append([val]) 
+        #onelist=[item for sublist in attlist for item in sublist]  #convert to single list - is the order the same as in the headers?
+        
+        from itertools import izip_longest
+            
+        if not filename:
+            filename=str(self.ID)+'.csv'
+        os.chdir(self.Files.dir+self.Files.folders['flare_lists'])
+        
         import csv
         with open(filename,'wb') as f:
             writer=csv.writer(f)
             writer.writerow(headers)
-            for row in rows:
-                writer.writerow(row)
+            for values in izip_longest(*attlist):
+                writer.writerow(values)
+        os.chdir(self.Files.dir)
+        return headers, attlist
 
     def export2idl(self, savname):
         '''because the dictionaries might be to big to send directly, read it in from the csv file'''
@@ -177,6 +220,27 @@ class OCFlare(object):
             self.Files.Raw['lightcurves']=newfname
         os.chdir(self.Files.dir)       
         return Rdata
+    
+    def download_messenger(self): #CHECK THAT THIS IS COMPATIBLE WITH OBJECT CONVENTIONS
+        '''Downloads Messenger .dat and .lbl files from the database, given event date. Can be used to get missing files too.'''
+        import urllib
+        dataurl = 'https://hesperia.gsfc.nasa.gov/messenger/'
+        #subfolders by year, month,day (except 2001)
+        listlen = len(self.ID)
+        for i,dt in zip(range(0,listlen -1),self.Datetimes['Messenger_peak'].date()):
+            datestring=dt.strftime('%Y%j')
+            newurl=dataurl+datestring[0:4] #just the year
+            filename='/xrs'+datestring
+            datfile=filename+'.dat'
+            lblfile=filename+'.lbl'
+            #first check if the file is already there:
+            if not os.path.exists('/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.dat'):
+                urllib.urlretrieve(newurl+datfile,'/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.dat')
+            if not os.path.exists('/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.lbl'):
+                urllib.urlretrieve(newurl+lblfile,'/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.lbl')
+            #fill in the xrsfilename section
+            if not self.Data_properties['XRS_files'][i]:
+                self.Data_properties['XRS_files'][i]=filename
 
     def get_Messenger_lightcurve(self, filename=False, raw=False, save=False):
         '''Get data for this flare's Messenger lightcurve, and adjust to counts/s if specified (raw = False). Save in new file if requested.'''
@@ -307,9 +371,7 @@ class OCFlare(object):
     def _query(self, path=False, AIA=False, STEREO=True, wave=False, timedelay = 30):
         '''Internal method to query VSO database for AIA or STEREO data and download it. Option to set time delay for stereo observations (in minutes). '''
         from sunpy.net import vso
-        from datetime import datetime as dt
         from datetime import timedelta as td
-        import astropy.units as u
         import sunpy.map
 
         vc = vso.VSOClient()
@@ -339,7 +401,8 @@ class OCFlare(object):
                         
     def get_AIA(self, filename=False, save=False, wave='304'):
         '''Get data for this flare's AIA map of specified wavelength. Query the database if need be. Save in new file if requested.'''
-        import astropy.units as u
+        from astropy.coordinates import SkyCoord
+
         path=self.Files.dir + self.Files.folders['stereo-aia']+'/'
         os.chdir(path)
         #first check the if there is a local file with filename stored in Files object. 
@@ -362,7 +425,7 @@ class OCFlare(object):
             files=files[0]
         if files !=[]:
             smap= sunpy.map.Map(files)
-            maps = {smap.instrument: smap.submap((-1100, 1100) * u.arcsec, (-1100, 1100) * u.arcsec)} #this could be empty if files is empty
+            maps = {smap.instrument: smap.submap(SkyCoord((-1100, 1100) * u.arcsec, (-1100, 1100) * u.arcsec,frame=smap.coordinate_frame))} #this could be empty if files is empty
         else: print 'No files found and no maps made!'
         
         if save: #pickle it?
@@ -370,11 +433,14 @@ class OCFlare(object):
             pickle.dump(maps,open(newfname,'wb'))
             self.Files.Raw['aia']=newfname
         os.chdir(self.Files.dir)
+
+        self.Observation.Rsun_AIA=maps[maps.keys()[0]].rsun_obs #what are the units?
         return maps
 
     def get_STEREO(self, filename=False, save=False):
         '''Get data for this flare's STEREO map. Query the database if need be. Save in new file if requested.'''
-        import astropy.units as u
+        from astropy.coordinates import SkyCoord
+
         path=self.Files.dir + self.Files.folders['stereo-aia']+'/'
         os.chdir(path)
         #first check the if there is a local file with filename stored in Files object. 
@@ -391,12 +457,19 @@ class OCFlare(object):
             
         #convert to maps
         files=self.Files.Raw['stereo']
+        if filename:
+            files=[]
+            files.append(filename)
         maps=[]
         if files !=[]:
             #smap= sunpy.map.Map(files)
-            for f in sunpy.map.Map(files):
-                maps.append({f.instrument: f.submap((-1100, 1100) * u.arcsec, (-1100, 1100) * u.arcsec)}) #this could be empty if files is empty
-            self.extract_stereo_times()
+            if len(files) == 1:
+                f=sunpy.map.Map(files[0])
+                maps.append({f.instrument: f.submap(SkyCoord((-1100, 1100) * u.arcsec, (-1100, 1100) * u.arcsec,frame=f.coordinate_frame))})
+            else:
+                for f in sunpy.map.Map(files):
+                    maps.append({f.instrument: f.submap(SkyCoord((-1100, 1100) * u.arcsec, (-1100, 1100) * u.arcsec,frame=coordinate_frame))}) #this could be empty if files is empty
+                self.extract_stereo_times()
         else: print 'No files found and no maps made!'
         
         if save: #pickle it? 
@@ -407,19 +480,45 @@ class OCFlare(object):
         os.chdir(self.Files.dir)
 
         return maps
-    
+
+    def do_clean(self,erange):
+        '''Do clean using method do_clean from full_disk_image.pro'''
+        import pidly
+        idl = pidly.IDL('/Users/wheatley/Documents/Solar/sswidl_py.sh')
+        idl('search_network,/enable')
+        idl('.compile full_disk_image.pro')
+        self.Datetimes.convert2string()
+        idl.time_int=[self.Datetimes.Messenger_peak_time,self.Datetimes.Messenger_peak_end]
+        idl.pix_size=[1,1]
+        idl.image_dim=[128,128]
+        ldet=list(self.Observation.Det[1:-1])
+        idl.det=list(int(l) for l in ldet)
+        idl.xyoffset=self.Properties.source_pos
+        idl.erange=erange
+        idl.outfilename=str(self.ID)+str(erange[0])+'-'+str(erange[1])+'plot.fits'
+        #idl.outsavename=str(self.ID)+'clean.sav'
+        idl('im=do_clean(time_int,pix_size,det,image_dim,xyoffset,erange,outfilename=outfilename,quiet=quiet)')
+        #idl('save,o,filename=outsavname')
+
+    def clean_all(self,eranges): #eranges=[[4,9],[12,18],[18,30],[30,80]]
+        for erange in eranges:
+            self.do_clean(erange)
+
     #############################################  MISC CALCULATION METHODS  #######################################################
 
     def extract_stereo_times(self):
         '''Put correct dates and times from downloaded stereo files into the datetimes.stereo_files list (except these are not actually the correct times, just the filenames. Can fix this later though, since right now the filename is more important)'''
         path=self.Files.dir + self.Files.folders['stereo-aia']
         os.chdir(path)
+        self.Datetimes.convert2datetime()
         try:
             fname= dt.strftime(self.Datetimes.stereo_start_time,'%Y%m%d')
         except TypeError:
-            fname= dt.strftime(self.Datetimes.Messenger_peak,'%Y%m%d')
+            fname= self.Datetimes.Messenger_peak[0:self.Datetimes.stereo_start_time.find(' ')]
         ffiles=glob.glob(fname+'*eub.fts')
-        ffiles.append(glob.glob(fname+'*eua.fts'))
+        if glob.glob(fname+'*eua.fts') !=[]:
+            ffiles=[]
+            ffiles =glob.glob(fname+'*eua.fts')
         self.Datetimes.stereo_times=[]
         for f in ffiles:
             timestr=f[f.find('_')+1:f.rfind('_')]
@@ -431,7 +530,6 @@ class OCFlare(object):
     def convert_coords_aia2stereo(self,map_aia=True,map_stereo=True,quiet=True,wave='304'):
         '''convert Properties.source_pos_disk to Properties.source_pos_STEREO for a given AIA and STEREO map'''
         from astropy.coordinates import SkyCoord
-        import astropy.units as u
         #import astropy.wcs
         import sunpy.coordinates
         import sunpy.coordinates.wcs_utils
@@ -479,6 +577,26 @@ class OCFlare(object):
         if not quiet: print(hpc_B)
 
         self.Properties.source_pos_STEREO = [hpc_B.Tx.value,hpc_B.Ty.value] #is this right?
+
+    def calc_projection_effect(self):
+        '''calculate the projection effect using formula in Krucker-St.Hilaire 2015'''
+        #get the Sun for that date
+        s_ang=sunpy.sun.solar_semidiameter_angular_size(self.Datetimes.current_map_time)
+        self.Observation.Rsun_ang=s_ang #but convert this to km...
+        if not self.Observation.Rsun_AIA:
+            Rsun=s_ang*715. #1arcsec=715km (how exact is this though)?
+        else:
+            Rsun=self.Observation.Rsun_AIA.value*715.
+        arcsec2deg=s_ang.value/90. #since s_ang is the radius not diameter, subtends an angle of 90 degrees not 180
+        angd=np.radians(self.Properties.e2['distance2limb'].value/arcsec2deg) #convert distance to degrees
+        hkm=Rsun*(1-np.cos(angd))/np.cos(angd)
+        angda=np.radians((self.Properties.e2['distance2limb'].value-30.)/arcsec2deg)        
+        hkma=Rsun*(1-np.cos(angda))/np.cos(angda)
+        print 'Projection effect of ',str(hkm), ' km, ', str(self.Properties.e2['distance2limb'].value/arcsec2deg) , ' degrees behind limb'
+        print 'Adjusted projection effect of ',str(hkma), ' km', str((self.Properties.e2['distance2limb'].value-30.)/arcsec2deg) , ' degrees behind limb'
+        self.Properties.e5={'hkm':hkm,'angd':angd,'hkma':hkma,'angda':angda}
+       
+        
             
     ################################################# INDIVIDUAL PLOT METHODS  ###########################################################
 
@@ -595,7 +713,6 @@ class OCFlare(object):
     
     def plot_aia(self, AIAmap=True,zoom=False,save=False, wave='304',all_wave=False):                             
         '''Plot the stereo map(s) and overplot the limb and source_pos_STEREO. If all_wave, then subplots'''
-        from astropy import units as u
         if not AIAmap:
             AIAmap=self.get_AIA(wave=wave)
         m=AIAmap[AIAmap.keys()[0]]
@@ -646,9 +763,8 @@ class OCFlare(object):
             tag=raw_input('Identifying tag? ')
             fig.savefig(fname+tag+'.png')
                     
-    def plot_stereo(self,AIAmap=True,maps=True,oplotlimb=False,oplotpoint=False,save=False,subplots=False,zoom=False,diff=False):
+    def plot_stereo(self,AIAmap=True,maps=True,oplotlimb=False,oplotpoint=False,save=False,subplots=False,zoom=False,diff=False,return_limb=True,n=False,xran=False,yran=False):
         '''Plot the stereo map(s) and overplot the limb and source_pos_STEREO. Enable the option to plot the difference of two maps, along with the original (map0)'''
-        from astropy import units as u
         from astropy.coordinates import SkyCoord
         import copy
         
@@ -657,9 +773,12 @@ class OCFlare(object):
         if subplots: fig = plt.figure(figsize=(len(maps)*3, 5))
         if self.Properties.source_pos_STEREO=='':
             self.convert_coords_aia2stereo(map_aia=AIAmap,map_stereo=maps[0],quiet=True) #because for each map it will be slightly different?
+        if n: #limit the number of plots to this number
+            maps=maps[0:n]
             
         for i,m in enumerate(maps):
             m=copy.deepcopy(m['SECCHI'])
+            self.Datetimes.current_map_time=m.date
             if diff:
                 if i!=0:
                     m0=copy.deepcopy(maps[i-1]['SECCHI'])
@@ -695,17 +814,58 @@ class OCFlare(object):
             ax.set_autoscale_on(False)
             if oplotlimb: #do I need to abjust this for Stereo A? check...
                 r = AIAmap[AIAmap.keys()[0]].rsun_obs.to(u.deg)-1*u.arcsec # remove the one arcsec so it's on disk.
-                th = np.linspace(-180*u.deg, 0*u.deg)
+                #r = (maps[0]['SECCHI'].rsun_arcseconds*u.arcsec).to(u.deg)-1*u.arcsec # remove the one arcsec so it's on disk.
+                import scipy
+                #r=astropy.constants.R_sun/scipy.constants.au
+                if self.Properties.source_pos[0] >0:
+                    th = np.linspace(-360*u.deg, -180*u.deg) 
+                else:
+                    th = np.linspace(-180*u.deg, 0*u.deg) #change from 180
+                    
                 x = r * np.sin(th)
                 y = r * np.cos(th)
                 coords = SkyCoord(x, y, frame=AIAmap[AIAmap.keys()[0]].coordinate_frame)
-
+                #print coords._rsun
+                coords._rsun=m.rsun_meters
+                #print coords._rsun
                 hgs = coords.transform_to('heliographic_stonyhurst')
                 hgs.D0 = m.dsun
-                hgs.L0 = m.heliographic_longitude
+                hgs._rsun=m.rsun_meters
+                print hgs._rsun
+                if np.mean(m.heliographic_longitude) >0:
+                    hgs.L0 = m.heliographic_longitude#+1*u.arcsec #add back the 1 arcsec
+                else:
+                    hgs.L0 = m.heliographic_longitude#-1*u.arcsec) #*1.01 try this... it's what's done for the euv in pascal's routine                    
                 hgs.B0 = m.heliographic_latitude
                 limbcoords = hgs.transform_to(pmap.coordinate_frame)
                 ax.plot_coord(limbcoords, color='w') #this is not overplotting in the zoomed version! why not? do I have to do this before the map.plot command?
+
+                #translate Pascal's method and see what it gives...
+                #default, roll_angle_range, [0,360]
+                #default, npts, 360L
+                #default, factor, 1d	;;1.0 for photospheric limb, about 1.01 for EUV limb...?
+                #roll_angle_range= [0,360]
+                #npts=360
+                #factor=1.01
+                
+                #Rs=phys_const('R_sun')/phys_const('AU')		;;Rs in [AU]
+                #a=psh_binning(roll_angle_range[0],roll_angle_range[1],Npts)/radeg()
+				# heeq=[0,cos(a[i]),sin(a[i])]*Rs*factor		;;soft/transparent/translucid limb
+                #Rs=astropy.constants.R_sun/astropy.constants.au #Rs in AU
+                #a=np.linspace(roll_angle[0]*u.deg,roll_angle[1]*u.deg,npts)
+                
+                #;;Now, rotate for L-angle around Z-axis, then B-angle around Y-axis:
+				
+				#th=blr[0]/radeg()
+				#M = [[cos(th),0,sin(th)],[0,1,0],[-sin(th),0,cos(th)]]
+				#heeq = M # heeq
+	
+				#th=blr[1]/radeg()
+				#M = [[cos(th),sin(th),0],[-sin(th),cos(th),0],[0,0,1]]
+				#heeq = M # heeq
+	
+				#xxyyd=heeq2hpc(heeq,[map.ROLL_ANGLE,map.b0,map.L0,map.RSUN])
+
                 
             if oplotpoint: #overplot source_loc_STEREO
                 scs=self.Properties.source_pos_STEREO*u.arcsec
@@ -722,4 +882,169 @@ class OCFlare(object):
         if save:
             tag=raw_input('Identifying tag? ')
             fig.savefig(fname+tag+'.png')
+
+        if return_limb:
+            return limbcoords
+
+    def get_closest_limbcoord(self,limbcoords=True,redef=False,plot=True,smap=False):
+        '''Find the closest limb coordinate to source_pos_STEREO'''
+        import shapely.geometry as geom
+        if not limbcoords:
+            limbcoords=self.plot_stereo(AIAmap=False,maps=False,oplotlimb=True,subplots=True,return_limb=True)
+        sp=self.Properties.source_pos_STEREO
+        if type(sp) != list or sp == [] or redef: #ask for source position
+            coordstr=raw_input('Please enter integer coordinates on the disk. Format: xxx,yyy')
+            self.Properties.source_pos_STEREO= [int(coordstr[:coordstr.find(',')]),int(coordstr[coordstr.find(',')+1:])]#format the string
+        sp=geom.Point(self.Properties.source_pos_STEREO)
+        lc=[]
+        for x,y in zip(limbcoords.Tx.value,limbcoords.Ty.value):
+            lc.append([x,y]) #format limbcoords
+        curve=geom.LineString(lc) #these might be in some weird format...lon,lat or something
+
+        distance=curve.distance(sp)*u.arcsec
+        if plot:        #draw segment
+            fig,ax=plt.subplots()
+            ax.set_autoscale_on(False)
+            if smap:
+                if type(smap) != dict:
+                    pass
+                else: #plot the map
+                    smap['SECCHI'].plot(axes=ax)
+            ax.plot(limbcoords.Tx.value,limbcoords.Ty.value)
+            ax.axis('equal')
+            point_on_line=curve.interpolate(curve.project(sp))
+            ax.plot([sp.x, point_on_line.x], [sp.y, point_on_line.y], color='red', marker='o', scalex=False, scaley=False)
+            fig.canvas.draw()
+            plt.show()
+        print 'coordinates of closest point on AIA limb: ', list(point_on_line.coords)[0]
+        print 'distance to closest point on AIA limb: ', distance
+        self.Properties.e2={'distance2limb':distance,'coordsonlimb': list(point_on_line.coords)[0]}
+        
+        return list(point_on_line.coords)[0]
+
+    def plot_RHESSI_AIA(self,AIAmap=False,erange=False,wave='193',title=False):
+        '''Overplot RHESSI contours on AIA map'''
+        import matplotlib.transforms as transforms
+        #from mpl_toolkits.axes_grid.inset_locator import inset_axes
+        #default energy range: all
+        all_erange=[[4,9],[12,18],[18,30],[30,80]] #deal with choosing energy range later
+        if not erange:
+            erange=all_erange
+        #convert the fits files to maps
+        os.chdir(self.Files.dir+self.Files.folders['clean'])
+        fitsfiles=glob.glob(str(self.ID)+'*plot.fits')
+        #            for f in sunpy.map.Map(files):
+        #        maps.append({f.instrument: f.submap((-1100, 1100) * u.arcsec, (-1100, 1100) * u.arcsec)}) #this could be empty if files is empty
+        maps=[]
+        for i,f in enumerate(fitsfiles):
+            mapf=sunpy.map.Map(f)
+            maps.append({str(all_erange[i]):mapf}) #try this
+            
+        if not AIAmap:
+            AIAmap=self.get_AIA(wave=wave)
+        #trim the map to RHESSI dimensions
+        center=self.Properties.source_pos
+        fov= 128 #128 rhessi pixels to arcsec
+        AIAmap=AIAmap[AIAmap.keys()[0]].submap((center[0]-fov,center[0]+fov)*u.arcsec,(center[1]-fov,center[1]+fov)*u.arcsec)
+        if not title:
+            title=''
+
+        strerange=[str(e) for e in erange]
+        fig,ax=plt.subplots()
+        AIAmap.plot(axes=ax,title=title)
+        #maps[0][maps[0].keys()[0]].draw_contours([.75]*u.percent,axes=ax)
+        #inset_axes=inset_axes(ax,width="100%",height="100%",)
+        a=plt.axes([center[0]-fov,center[1]-fov,center[0]+fov,center[1]+fov])
+        a=plt.axes([-1000,-450,-800,-200])
+        for m in maps:
+            if m.keys()[0] in strerange:
+                offset = transforms.ScaledTranslation(center[0], center[1],fig.dpi_scale_trans)
+                shadow_transform = ax.transData + offset
+                m[m.keys()[0]].draw_contours([.15]*u.percent,axes=a) #contour args ... whatever those are. colors and labels I hope?
+                #do I need to make another axis... offset it by center? it's not reading the keywords from fits :(
+        plt.show()
+
+    def plot_RHESSI_AIA_IDL(self,AIAmap=False,erange=False,wave='193',title=False,tag=False,fov=100):
+        '''Overplot RHESSI contours on AIA map using IDL'''
+        #default energy range: all
+        import pidly
+        all_erange=[[4,9],[12,18],[18,30],[30,80]] #deal with choosing energy range later
+        if not erange:
+            erange=all_erange
+        #convert the fits files to maps
+        os.chdir(self.Files.dir+self.Files.folders['clean'])
+        rfitsfiles=glob.glob(str(self.ID)+'*plot.fits')
+        
+        os.chdir(self.Files.dir)
+        afitsfiles=self.Files.Raw['aia']
+        for a in afitsfiles:
+            if wave in a:
+                aa=a
+                print aa
+        if not aa:
+            aa=afitsfiles[0]
+        
+        idl = pidly.IDL('/Users/wheatley/Documents/Solar/sswidl_py.sh')
+        idl.afile=aa
+        if AIAmap:
+            idl.afile=AIAmap
+        idl.adir=self.Files.dir+self.Files.folders['stereo-aia']+'/'
+        idl.rdir=self.Files.dir+self.Files.folders['clean']+'/'        
+        idl('fits2map,adir+afile,amap')
+        idl('loadct,9')
+        idl('keywords = PSWINDOW()')
+        #DEVICE, _EXTRA=keywords 
+        idl("set_plot,'ps'")
+        if not tag:
+            idl.filename=str(self.ID)+'_rhessi_AIA.eps'
+        else:
+            idl.filename=str(self.ID)+'_rhessi_AIA_'+tag+'.eps'
+
+        idl('device, filename=filename,/encapsulated,/decomposed,/color,bits_per_pixel=8')
+        #Idl('loadct,9')
+        center=self.Properties.source_pos
+
+        labels=[]
+        idl.center=center
+        idl.xran=[center[0]-fov,center[0]+fov]
+        idl.yran=[center[1]-fov,center[1]+fov]
+        idl('plot_map,amap,center=center,xran=xran,yran=yran,/window,/limb,lcolor=cgcolor("White"),lthick=5')
+        #idl('loadct,12')
+        idl("colors=[cgcolor('White'),cgcolor('Sky Blue'),cgcolor('Lime Green'),cgcolor('Magenta')]")
+        ne=len(erange)
+        idl.ner=ne
+        #idl('ne=fix(ne)')
+        idl('lcolor=strarr(ner)')
+        for j,ee in enumerate(erange):
+            estr=str(ee[0])+"-"+str(ee[1])
+            idl.j=j
+            for i,r in enumerate(rfitsfiles):
+                if estr in r:
+                    print r
+                    idl.rfiles=r
+                    #color=i*75
+                    idl.i=i
+                    idl("color=colors[i]")
+                    idl("lcolor[j]=i")
+                    #idl("colors=[cgcolor('White'),cgcolor('Sky Blue'),cgcolor('Lime Green'),cgcolor('Magenta')]")
+                    #if i==0:
+                    #    color=16
+                    #    idl.color=color
+                    #    #idl("color=cgcolor(White)")
+                    print i,all_erange[i],ee,idl.color
+                    #colors.append(int(color))
+                    labels.append(estr+' keV')
+                    idl('fits2map,rdir+rfiles,rmap')
+                    idl('level=mean(rmap.data)+3*stddev(rmap.data)')
+                    idl('plot_map,rmap,/cont,/over,levels=[level],color=string(color),thick=10')
+        idl.labels=labels
+        #idl.colors=colors
+        #idl('colors=string(colors)')
+        idl('print,lcolor')
+        #idl('print,typename(colors),typename(string(colors))')
+        idl("al_legend,labels,colors=colors[lcolor],linestyle=0,/bottom,/right,thick=5,textcolors=cgcolor('White')")
+        #idl.filename=str(self.ID)+'_rhessi_AIA.png'
+        #idl("write_png,filename,tvrd(/true)")
+        idl('device,/close_file')
+       
 

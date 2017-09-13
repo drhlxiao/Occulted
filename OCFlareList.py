@@ -1,5 +1,5 @@
  #######################################
-# OC.Flarepy
+# OCFlareList.py
 # Erica Lastufka 17/5/17 
 
 #Description: Class of functions to deal with all data,files,calculations of the study
@@ -10,6 +10,7 @@ import os
 import pickle
 import glob
 import OCFlare
+
 
 class OCFlareList(object):
     ''' This object will have the following attributes:
@@ -33,10 +34,12 @@ class OCFlareList(object):
                     self.list.append(OCFlare.OCFlare(i,calc_times=calc_times, calc_missing=calc_missing,gen=gen))
         elif IDs and type(IDs) == str:
             #assume it's a csv or sav file that has a column of flare ids in it
-            import data_managementv2 as d
-            with d.OCData(IDs) as o:
-                for i in o.ID:
-                    self.list.append(OCFlare.OCFlare(i,calc_times=calc_times, calc_missing=calc_missing,gen=gen))
+            import data_management2 as d
+            #with d.OCData(IDs) as o: #sadly doesn't work, let's do manual cleanup then:
+            o = d.OCData(IDs)
+            for i in o.ID:
+                self.list.append(OCFlare.OCFlare(i,calc_times=calc_times, calc_missing=calc_missing,gen=gen, legacy=True, from_csv=IDs))
+            del o
             
         if folder:
             #restore all the Flare pickle files and combine into list
@@ -93,8 +96,29 @@ class OCFlareList(object):
                 else:
                     alist.append(getattr(self.list[i].Observation,att)[key])
         elif att=='ID':
-            alist.append(getattr(self.list[i],'ID'))
+            for i in np.arange(0,len(self.list)):
+                alist.append(getattr(self.list[i],'ID'))
         return alist
+
+    def export2csv(self, filename):
+        '''Exports flare list attributes to csv file'''
+        for flare,i in enumerate(self.list):
+            if i==0:
+                headers=flare.export2csv()[0]
+                attlist=flare.export2csv()[1]
+            attlist.append(flare.export2csv()[1])
+
+        from itertools import izip_longest
+            
+        os.chdir(self.list[0].Files.dir+self.list[0].Files.folders['flare_lists'])
+        
+        import csv
+        with open(filename,'wb') as f:
+            writer=csv.writer(f)
+            writer.writerow(headers)
+            for values in attlist:
+                writer.writerow(values)
+        os.chdir(self.list[0].Files.dir)
 
 ####################################################  PLOT METHODS  ##################################################################
 
@@ -116,6 +140,7 @@ class OCFlareList(object):
     
     def plot_goes_ratio(self,title= "",ymin=0, ymax=3, labels=1,ylog=True, scatter = True,cc='GOES',save=False,show=True):
         '''make a plot of the GOEs ratio vs. angle'''
+        import matplotlib.patches as mpatches
         mc=self.isolate_att("Messenger_GOES")
         gc=self.isolate_att("GOES_GOES")
         angle=self.isolate_att("Angle")
@@ -189,19 +214,152 @@ class OCFlareList(object):
             plt.savefig(save)
         if show:
             fig.show()
+            
+    def plot_goes_messenger(self,title= "",ymin=10**-10, ymax=10**-3, minangle=False,maxangle=False,labels=1,loglog=True, loc=False, scatter = True,cc='GOES',save=False,show=True):
+        '''make a plot of the Messenger_GOES vs GOES_GOES'''
+        import matplotlib.patches as mpatches
 
-   def hist_ratio(self,title='All flares',gc='all', save=False,show=True):
-       '''Make histogram to see distribution of ratios by goes class'''
-       ratio=get_ratio(flare_list)
-       ratio = ratio[np.where(ratio != -1)]
-       #print ratio
-       fig = plt.figure()
-       ax1 = fig.add_subplot(111)
-       goes=np.array(convert_goes2flux(flare_list.Flare_properties['GOES_GOES']))
-       #print goes
+        mc=self.isolate_att("Messenger_GOES")
+        gc=self.isolate_att("GOES_GOES")
+        angles=self.isolate_att("Angle")
+        if loc:
+            location=self.isolate_att("source_pos")
+        else:
+            location=np.arange(len(mc)) #just an array of meaningless numbers
+        if labels ==1:
+            ids=self.isolate_att("ID")
+        else:
+            ids=self.isolate_att("Messenger_peak")
+
+        gcgt0,mcgt0=[],[]
+        colors,coordlabel=[],[]
+        classes=['m','y','g','b']
+
+        def color_code(ang,ulimit=180,llimit=0,nsegments=3):
+            arange= ulimit - llimit
+            #print arange,llimit+arange/nsegments,llimit+2*arange/nsegments
+            if ang >= llimit and ang <= llimit+arange/nsegments:return 'b'
+            elif ang <= llimit+2*arange/nsegments: return 'r'
+            else : return 'g'
+        
+        for mval,gval,ID,ang,l in zip(mc,gc,ids,angles,location): 
+            app=False
+            if gval != 0.00 and gval !=np.nan and gval > 0.0:
+                if not loc and not minangle and not maxangle:app= True
+                if loc and minangle and l != '[0,0]' and l != '' and type(l) == str and ang > minangle: app = True
+                elif loc and maxangle and l != '[0,0]' and l != '' and type(l) == str and ang < maxangle: app = True
+                elif loc and not minangle and not maxangle and l != '[0,0]' and l != '' and type(l) == str: app = True
+                    
+                try:
+                    if app: #then append, else go on to the next iteration
+                        gcgt0.append(gval)
+                        mcgt0.append(mval)
+                        #print app, ang,gval,mval,l
+
+                        #now determine details of color coding etc
+                        if cc=='GOES':
+                            idx=-int(np.floor(np.log10(gval))) # int from <9 to >4
+                        elif cc=='Messenger':
+                            idx=-int(np.floor(np.log10(mval))) # int from <9 to >4
+                        elif cc == 'angle':
+                            if minangle: #color code by angle
+                                colors.append(color_code(ang,llimit=minangle))
+                            elif maxangle: #color code by angle
+                                colors.append(color_code(ang,ulimit=maxangle))
+                            else: #color code by angle divided into 3 segments. Should do something about the legend labels too...
+                                colors.append(color_code(ang))
+                    
+                        if 'idx' in locals():
+                            if idx <=4: colors.append('r')
+                            elif idx >=9: colors.append('k')
+                            else: colors.append(classes[idx-5])
+                        
+                        if labels==1:
+                            coordlabel.append(ID)
+                        else: #0 or 2
+                            coordlabel.append(datetime.strftime(ID,'%D %H:%M'))
+                except UnboundLocalError: continue
+            #if scatter:
+            #    delta = 50
+            #elif cs == '':#notes column is empty
+            #    delta.append(5000*10*2**np.rint(np.log10(np.abs(mval-gval)))) #difference in size between the GOES classes
+            #else: #notes carries chisq value
+            #    delta.append(50*10*2**np.rint(np.log10(float(cs))))
+
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
+        ax1.scatter(gcgt0,mcgt0, s=50, c=colors,alpha=.75) #for some reason the masking is not being effective!
+        ax1.plot(np.arange(10),np.arange(10),linestyle='dashed',color='k')
+       
+        #if labels != 0: 
+        #    for x,y,t in zip(np.array(labelang),labelratio,coordlabel):
+        #        #print x,y,t
+        #        ax1.annotate('%s' % t, xy=(x,y), textcoords='data')
+        #    plt.grid()
+
+   
+        plt.xlabel('GOES Flux, W m$^{-2}$')
+        plt.ylabel('Messenger Flux, W m$^{-2}$')
+
+        if loglog:
+            ax1.set_yscale('log')
+            ax1.set_xscale('log', nonposx='clip')
+            
+        ax1.set_aspect('equal')
+        ax1.set_ylim([ymin,ymax])
+        ax1.set_xlim([ymin,ymax]) #let's keep everything on the same scale...
+        plt.title(title)
+        if cc != 'angle':
+            X = mpatches.Patch(color='red', label='X')
+            M = mpatches.Patch(color='magenta', label='M')
+            C = mpatches.Patch(color='yellow', label='C')
+            B = mpatches.Patch(color='green', label='B')
+            A= mpatches.Patch(color='blue', label='A')
+            K= mpatches.Patch(color='black', label='<A')
+            handles=[X,M,C,B,A,K]
+        else:
+            if minangle:
+                t1=str(minangle+(int(minangle))/3)
+                t2=str(minangle+(2*int(minangle))/3)
+                mxa='180'
+                mna=str(minangle)
+            elif maxangle:
+                t1=str((int(maxangle))/3)
+                t2=str((2*int(maxangle))/3)
+                mxa=str(maxangle)
+                mna='0'                
+            else:
+                t1='60'
+                t2='120'
+                mna='0'
+                mxa='180'
+
+            B= mpatches.Patch(color='blue', label='$' +mna+' \leq \\theta \leq '+t1+'\degree$')
+            R = mpatches.Patch(color='red', label='$'+t1+'\degree \leq \\theta \leq '+t2+'\degree$')
+            G = mpatches.Patch(color='green', label='$'+t2+'\degree \leq \\theta \leq'+mxa+'\degree$')
+            handles=[B,R,G]
+           
+        ax1.legend(handles=handles,loc='lower right',fontsize='medium')
+
+        ax1.plot()
+        if save:
+            plt.savefig(save)
+        if show:
+            fig.show()
+        #return colors
+
+    def hist_ratio(self,title='All flares',gc='all', save=False,show=True):
+        '''Make histogram to see distribution of ratios by goes class'''
+        ratio=get_ratio(flare_list)
+        ratio = ratio[np.where(ratio != -1)]
+        #print ratio
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
+        goes=np.array(convert_goes2flux(flare_list.Flare_properties['GOES_GOES']))
+        #print goes
     
-       if gc == 'all':
-           n, bins, patches = plt.hist(ratio, np.logspace(-3,3,12), facecolor='orange', alpha=0.75)
+        if gc == 'all':
+            n, bins, patches = plt.hist(ratio, np.logspace(-3,3,12), facecolor='orange', alpha=0.75)
         if gc == 'A':
             gt,lt =np.where(goes > 10**-8),np.where(goes < 10**-7)
             all=set(gt[0]) & set(lt[0])
@@ -247,42 +405,54 @@ class OCFlareList(object):
             ax1.legend(handles=[M,C,B,A],loc='upper left',fontsize='medium')
         
     
-       plt.xlabel('Ratio between Messenger GOES and actual GOES')
-       plt.ylabel('Number of Events')
-       plt.gca().set_xscale("log")
-       plt.title(title)
-       ax1.set_ylim([0,100])
-       #ax1.set_xlim([0,150])
+        plt.xlabel('Ratio between Messenger GOES and actual GOES')
+        plt.ylabel('Number of Events')
+        plt.gca().set_xscale("log")
+        plt.title(title)
+        ax1.set_ylim([0,100])
+        #ax1.set_xlim([0,150])
 
-       ax1.plot()
-       if save:
-           plt.savefig(save)
+        ax1.plot()
+        if save:
+            plt.savefig(save)
         if show:
             fig.show()
 
-    def sunpy_spectrogram(data,ebins,i): #since this is for one spectrogram move it to Observations?
-        #from sunpy.spectra import spectrogram as s
-        import mySpectrogram as s
-        eaxis=ebins[0:-1]
-        last=int(data['len'][0]-1)
-        time_axis=np.arange(0,last+1)*4.#data[0]['ltime'] #ndarray of time offsets,1D #need the 4 for RHESSI time interval
-        start= dt.strptime(data['UT'][i][0],'%d-%b-%Y %H:%M:%S.000') #datetime
-        try:
-            end= dt.strptime(data['UT'][i][last],'%d-%b-%Y %H:%M:%S.000') #datetime #might want to modify this to be where the data =0
-        except ValueError:
-            import datetime
-            end = start + datetime.timedelta(seconds=time_axis[-1])
-            #print dt.strptime(data['UT'][i][last-1],'%d-%b-%Y %H:%M:%S.000')
-        drate=np.transpose(np.log10(data['rate'][i][0:last+1])) #get rid of zeros before taking log10?
-        #drate=np.nan_to_num(drate)
-        drate[drate == -np.inf] = 0.0
-        for n,col in enumerate(drate.T):
-            if all([c ==0.0 for c in col]):
-                drate[:,n] = np.nan
-        a=s.Spectrogram(data=drate,time_axis=time_axis,freq_axis=eaxis,start=start,end=end,instruments=['RHESSI'],t_label='',f_label='Energy (keV)',c_label='log(counts/cm^2 s)')
-        fig=a.plot()
+    def plot_all_stereo(self,AIAmap=False,maps=False,oplotlimb=True,oplotpoint=False,save=True,subplots=True,zoom=False,diff=False,return_limb=False,n=4):
+        '''plot all stereo plots for the flares in the list'''
+        limbcoords=[]
+        for flare in self.list:
+            if not return_limb:
+                flare.plot_stereo(AIAmap=AIAmap,maps=maps,oplotlimb=oplotlimb,oplotpoint=oplotpoint,save=save,subplots=subplots,zoom=zoom,diff=diff,return_limb=return_limb,n=n)
+            else:
+                limbcoords.append(flare.plot_stereo(AIAmap=AIAmap,maps=maps,oplotlimb=oplotlimb,oplotpoint=oplotpoint,save=save,subplots=subplots,zoom=zoom,diff=diff,return_limb=return_limb,n=n))
+        if return_limb:
+            return limbcoords
+        
+    def plot_all_aia(self,AIAmap=False,zoom=False,save=True, wave='304',all_wave=False):
+        '''plot all aia plots for the flares in the list'''
+        for flare in self.list:
+            flare.plot_aia(AIAmap=AIAmap,zoom=zoom,save=save, wave=wave,all_wave=all_wave)
 
-        outfilename='data/spectrograms/'+s.get_day(a.start).strftime("%d%b%Y")+'sgram.png'
-        fig.figure.savefig(outfilename)
-        plt.clf()
-        return a
+    def plot_all_rhessi_aia(self,AIAmap=False,erange=False, wave='193',tag=False):
+        '''plot all aia plots for the flares in the list'''
+        for flare in self.list:
+            flare.plot_RHESSI_AIA_IDL(erange=[[4,9],[12,18]],tag='lowE')  
+            flare.plot_RHESSI_AIA_IDL(erange=[[4,9],[12,18],[18,30]],tag='3E')      
+            flare.plot_RHESSI_AIA_IDL(erange=[[4,9],[12,18],[18,30],[30,80]],tag='4E')
+
+    def plot_all_lightcurves(self,AIAmap=True,maps=True,oplotlimb=False,oplotpoint=False,save=False,subplots=False,zoom=False,diff=False,return_limb=True):
+        '''plot all lightcurves for the flares in the list'''
+        for flare in self.list:
+            flare.get_closest_limbcoord(limbcoords=limbcoords,redef=redef,plot=plot,smap=smap)
+
+    def plot_all_spectrograms(self,filename,ivec):
+        '''plot all spectrograms for the flares in the list'''
+        for flare,i in zip(self.list,ivec):
+            flare.sunpy_spectrogram(filename,i)
+
+    def get_all_limbcoord(self,limbcoords=False,redef=False,plot=True,smap=False):
+        '''get closest coord on the limb for the flares in the list'''
+        for flare in self.list:
+            flare.get_closest_limbcoord(limbcoords=limbcoords,redef=redef,plot=plot,smap=smap)
+       

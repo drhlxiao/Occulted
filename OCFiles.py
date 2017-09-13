@@ -26,7 +26,7 @@ class OCFiles(object):
         '''Initialize the object, given the flare ID. This requires use of the OCFiles object I think...'''
         if legacy: #get info from legacy OCData object and the associated csv/sav files
             self.dir='/Users/wheatley/Documents/Solar/occulted_flares/' #top level directory
-            self.folders={'spectrograms':'data/spectrograms','lightcurves':'data/lightcurves','stereo-aia':'data/stereo-aia','stereo_pfloops':'data/stereo_pfloops','ql_images':'data/ql_images','xrs_files':'data/xrs_files','flare_lists':'flare_lists','bproj_vis':'data/bproj_vis','plots':'plots'}
+            self.folders={'spectrograms':'data/spectrograms','lightcurves':'data/lightcurves','stereo-aia':'data/stereo-aia','stereo_pfloops':'data/stereo_pfloops','ql_images':'data/ql_images','xrs_files':'data/xrs_files','flare_lists':'flare_lists','bproj_vis':'data/bproj_vis','plots':'plots','clean':'data/clean'}
 
             if not filename:
                 filename= '/Users/wheatley/Documents/Solar/occulted_flares/flare_lists/list_final.csv'#default file to read
@@ -39,14 +39,30 @@ class OCFiles(object):
 
         if not legacy:
             #read datetimes csv file (can just restore the pickle file otherwise. Build this into OCFlare class):
+            import pandas as pd
+            if filename: #it's the big one
+                data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
+                #i=self.get_index(ID,data) #get the index of the flare if it's in a list
+                self.Raw=dict()
+                self.folders=dict()
+                for key in data.keys(): #only do this if it starts with Observation
+                    if key.startswith('Files.') and key !='Files.Raw' and key !='Files.folders':
+                        dat=data[key]
+                        key=key[key.find('.')+1:] #trim it
+                        if key.startswith('Raw'): #do stuff
+                            key=key[key.find('.')+1:]
+                            self.Raw[key]=dat.values[0]
+                        if key.startswith('folders'): #do stuff
+                            key=key[key.find('.')+1:]
+                            self.folders[key]=dat.values[0]
+                        setattr(self,key,dat.values[0])
             if not filename:
                 filename= '/Users/wheatley/Documents/Solar/occulted_flares/flare_lists/'+str(ID)+'OCFiles.csv' #default file to read
-            import pandas as pd
-            data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
-            i=self.get_index(ID,data) #get the index of the flare if it's in a list
-            self.Raw={'xrs_files':data['Raw']["xrs_files"][i],'aia':data['Raw']["xrs_files"][i],'stereo':data['Raw']["xrs_files"][i],'RHESSI':data['Raw']["xrs_files"][i],'ospex':'','spectrogram':'','e2':'','e3':'','e4':'','e5':''}
-            self.Lists={'flare_list':data["csv_name"][i]}
-            self.Plots={} #all the locations/naming conventions for the plots?
+                data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
+                i=self.get_index(ID,data) #get the index of the flare if it's in a list
+                self.Raw={'xrs_files':data['Raw']["xrs_files"][i],'aia':data['Raw']["xrs_files"][i],'stereo':data['Raw']["xrs_files"][i],'RHESSI':data['Raw']["xrs_files"][i],'ospex':'','spectrogram':'','e2':'','e3':'','e4':'','e5':''}
+                self.Lists={'flare_list':data["csv_name"][i]}
+                self.Plots={} #all the locations/naming conventions for the plots?
 
         if gen: #generate missing filenames by searching for them
             self.find_ospex(ID)
@@ -57,8 +73,13 @@ class OCFiles(object):
         self.Notes= '' #if I need to write a note about this iteration
  
     def get_index(self,ID,data):
-        i= np.where(ID == data['ID'])
-        return i[0][0]
+        try:
+            i= np.where(ID == np.array(data['ID']))
+            i=i[0]
+        except TypeError:
+            i= np.searchsorted(np.array(datadata['ID']), ID)
+        return i[0]
+
 
     def find_ospex(self,ID):
         odir='/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'

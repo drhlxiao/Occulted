@@ -43,12 +43,21 @@ class OCObservation(object):
  
         if not legacy:
             #read attributes from csv file (can just restore the pickle file otherwise. Build this into OCFlare class):
-            if not filename: filename= '/Users/wheatley/Documents/Solar/occulted_flares/data/objects/'+str(ID)+'OCObservation.csv'#default file to read - need an except in case it doesn't exist
             import pandas as pd
-            data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
-            i=self.get_index(ID,data) #get the index of the flare if it's in a list
-            for att,key in zip(tags,tags):
-                setattr(self,att,data[key])
+            if filename: #it's the big one
+                data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
+                #i=self.get_index(ID,data) #get the index of the flare if it's in a list
+                for key in data.keys(): #only do this if it starts with Observation
+                    if key.startswith('Observation.'):
+                        dat=data[key]
+                        key=key[key.find('.')+1:] #trim it
+                        setattr(self,key,dat.values[0])
+            if not filename:
+                filename= '/Users/wheatley/Documents/Solar/occulted_flares/data/objects/'+str(ID)+'OCObservation.csv'#default file to read - need an except in case it doesn't exist
+                data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
+                #i=self.get_index(ID,data) #get the index of the flare if it's in a list
+                for key in data.keys(): #only do this if it starts with Observation
+                    setattr(self,key,data.values[0])
 
         #set some defaults
         if self.Rebins == '': self.Rebins=[[],[],[],[],[],[]]
@@ -60,8 +69,13 @@ class OCObservation(object):
 
     def get_index(self,ID,data):
         '''Get index of flare in flare list file'''
-        i= np.where(ID == data['ID'])
-        return i[0][0]
+        try:
+            i= np.where(ID == np.array(data['ID']))
+            i=i[0]
+        except TypeError:
+            i= np.searchsorted(np.array(datadata['ID']), ID)
+        return i[0]
+
     
     def write(self, picklename=False):
         '''Write object to pickle'''

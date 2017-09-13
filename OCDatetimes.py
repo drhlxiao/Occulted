@@ -72,23 +72,21 @@ class OCDatetimes(object):
 
         if not legacy:
             #read datetimes csv file (can just restore the pickle file otherwise. Build this into OCFlare class):
+            import pandas as pd
+            if filename: #it's the big one
+                data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
+                #i=self.get_index(ID,data) #get the index of the flare if it's in a list
+                for key in data.keys(): #only do this if it starts with Observation
+                    if key.startswith('Datetimes.'):
+                        dat=data[key]
+                        key=key[key.find('.')+1:] #trim it
+                        setattr(self,key,dat.values[0])
             if not filename:
                 filename= '/Users/wheatley/Documents/Solar/occulted_flares/objects/'+str(ID)+'OCDatetimes.csv'#default file to read
-            import pandas as pd
-            data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
-            i=self.get_index(ID,data) #get the index of the flare if it's in a list
-            self.Messenger_peak=data["Messenger_peak"][i]
-            self.RHESSI_peak=data["RHESSI_peak"][i]
-            self.Obs_start_time=data["Obs_start_time"][i]
-            self.Obs_end_time=data["Obs_end_time"][i]
-            self.Spec_start_time=data["Spec_start_time"][i]
-            self.Spec_end_time=data["Spec_end_time"][i]
-            self.lc_start_time=data["lc_start_time"][i]
-            self.lc_end_time=data["lc_end_time"][i]
-            self.pf_loop_time=data["pf_loop_time"][i]
-            self.stereo_start_time=data["stereo_start_time"][i]
-            self.stereo_times=data["stereo_times"][i]
-
+                data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
+                for key in data.keys(): #only do this if it starts with Observation
+                    setattr(self,key,data.values[0])
+                 
         self.convert2datetime()
         #update the OCFiles object with the file used to generate this instance of the object
         if calc_times:
@@ -120,8 +118,12 @@ class OCDatetimes(object):
 
     def get_index(self,ID,data):
         '''Write object to pickle'''
-        i= np.where(ID == data['ID'])
-        return i[0][0]
+        try:
+            i= np.where(ID == np.array(data['ID']))
+            i=i[0]
+        except TypeError:
+            i= np.searchsorted(np.array(datadata['ID']), ID)
+        return i[0]
 
     def calc_times(self,i):
         '''Calculate lc and spec times based on parameters I had in the original lightcurves.py and spectrograms.py'''
@@ -177,7 +179,7 @@ class OCDatetimes(object):
                 elif '/' in val:
                     fc = '%m/%d/%y %H:%M:%S.00'
                 elif re.search('[a-z]', val) is not None: #not None if there is a letter
-                    fc ='%d-%b-%Y %H:%M:%S' #current format code - might need to add .000
+                    fc ='%d-%b-%Y %H:%M:%S.000' #current format code - might need to add .000
                 else: #it's come straight from idl ....
                     fc ='%Y-%m-%d %H:%M:%S'
                 if fc != '':
@@ -191,8 +193,9 @@ class OCDatetimes(object):
                         try:
                             setattr(self,a,dt.strptime(val, fc))
                         except ValueError:
-                            fc=fc ='%d-%b-%Y %H:%M:%S.000'
-                            setattr(self,a,dt.strptime(val, fc))
+                            pass
+                            #fc=fc ='%d-%b-%Y %H:%M:%S.000'
+                            #setattr(self,a,dt.strptime(val, fc))
 
     def convert2string(self):
         '''If it's a datetime make it a string'''
