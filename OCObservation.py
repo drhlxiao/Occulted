@@ -27,8 +27,13 @@ class OCObservation(object):
             Notes
         Methods: 
             Calculate photon flux rates? TBD'''
-    def __init__(self, ID, legacy=True,filename=False):
+    def __init__(self, ID, legacy=True,filename=False, att_dict=False):
         '''Return an empty Data_Study object, unless a filename to a correctly formatted csv is given. Do I need to be able to go from a dictionary to an object too?'''
+        if att_dict: #distribute these
+            legacy=False
+            for k in att_dict.keys():
+                setattr(self,k,att_dict[k]) #types?
+        
         tags=['CLEAN','Rcountrate','Mcountrate','Rpflux','Mpflux','Rebins','Mebins','Swave','Slos','AIAwave']
         if legacy: #get info from legacy OCData object and the associated csv/sav files
             if not filename: filename= '/Users/wheatley/Documents/Solar/occulted_flares/flare_lists/list_final.csv'#default file to read
@@ -41,31 +46,43 @@ class OCObservation(object):
             for att,key in zip(tags,tags):
                 setattr(self,att,'')
  
-        if not legacy:
-            #read attributes from csv file (can just restore the pickle file otherwise. Build this into OCFlare class):
-            import pandas as pd
-            if filename: #it's the big one
-                data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
-                #i=self.get_index(ID,data) #get the index of the flare if it's in a list
-                for key in data.keys(): #only do this if it starts with Observation
-                    if key.startswith('Observation.'):
-                        dat=data[key]
-                        key=key[key.find('.')+1:] #trim it
-                        setattr(self,key,dat.values[0])
-            if not filename:
-                filename= '/Users/wheatley/Documents/Solar/occulted_flares/data/objects/'+str(ID)+'OCObservation.csv'#default file to read - need an except in case it doesn't exist
-                data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
-                #i=self.get_index(ID,data) #get the index of the flare if it's in a list
-                for key in data.keys(): #only do this if it starts with Observation
-                    setattr(self,key,data.values[0])
+        #if not legacy:
+        #    #read attributes from csv file (can just restore the pickle file otherwise. Build this into OCFlare class):
+        #    import pandas as pd
+        #    if filename: #it's the big one
+        #        data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
+        #        #i=self.get_index(ID,data) #get the index of the flare if it's in a list
+        #        for key in data.keys(): #only do this if it starts with Observation
+        #            if key.startswith('Observation.'):
+        #                dat=data[key]
+        #                key=key[key.find('.')+1:] #trim it
+        #                setattr(self,key,dat.values[0])
+        #    if not filename:
+        #        filename= '/Users/wheatley/Documents/Solar/occulted_flares/data/objects/'+str(ID)+'OCObservation.csv'#default file to read - need an except in case it doesn't exist
+        #        data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
+        #        #i=self.get_index(ID,data) #get the index of the flare if it's in a list
+        #        for key in data.keys(): #only do this if it starts with Observation
+        #            setattr(self,key,data.values[0])
 
         #set some defaults
-        if self.Rebins == '': self.Rebins=[[],[],[],[],[],[]]
-        if self.Mebins == '': self.Mebins=[[],[]]
-        if self.Swave == '': self.Swave=193
-        if self.AIAwave == '': self.AIAwave=[171,193,304]
+        try:
+            if self.Rebins == '': self.Rebins=[[],[],[],[],[],[]]
+        except AttributeError:
+            self.Rebins=[[],[],[],[],[],[]]
+        try:
+            if self.Mebins == '': self.Mebins=[[],[]]
+        except AttributeError:
+            self.Mebins=[[],[]]
+        try:
+            if self.Swave == '': self.Swave=193
+        except AttributeError:
+            self.Swave=193
+        try:
+            if self.AIAwave == '': self.AIAwave=[171,193,304]
+        except AttributeError:
+            self.AIAwave=[171,193,304]
 
-        self.Notes=''
+        #self.Notes=''
 
     def get_index(self,ID,data):
         '''Get index of flare in flare list file'''

@@ -14,6 +14,7 @@ import os
 import matplotlib.pyplot as plt
 import astropy.units as u
 from astropy.coordinates import SkyCoord
+import pandas as pd
 
 import OCDatetimes as ocd
 import OCFiles as ocf
@@ -33,108 +34,72 @@ class OCFlare(object):
             Method for translating between pickle, .sav and .csv
         A list of OCFlare objects will comprise an OCFlareList object, which will include all the plotting methods
      '''
-    def __init__(self, ID, legacy=True, calc_times=False, calc_missing=False,gen=False,from_csv=False):
+    def __init__(self, ID, legacy=True, calc_times=False, filename= False,calc_missing=False,gen=False,freload=False):
         '''Initialize the flare object from an ID, pickle files in given folder, or legacy .csv or .sav'''
         self.ID=ID
-        #first see if we can just restore the objects from pickles...
-        if not legacy:
-            ppath='/Users/wheatley/Documents/Solar/occulted_flares/flare_lists/'+str(ID)+'.p'
-            ispickle=glob.glob(ppath)
-            if ispickle !=[]:
-                if raw_input('Found object pickle for flare ' + str(ID) + ' modified on ' + dt.fromtimestamp(os.path.getmtime(ppath)).strftime('%Y-%m-%d %H:%M:%S') +', reload?') == 'Y':
-                    self=pickle.load(open(ispickle[0],'rb'))
-                    return
-        if from_csv: #the input is a filename
-            filename=from_csv
-        else:
-            filename=False
-        pickles=sorted(glob.glob(str(ID)+'*.p')) #might want to make a special directory for these
-        if pickles:
-            for p in pickles:
-                if p == str(ID)+'.p':
-                    self=pickle.load(open(p,'rb')) #does this work? can test
-                    break
-                if p.endswith('OCDatetimes.p'):
-                    self.Datetimes=pickle.load(open(p,'rb'))
-                else:
-                    self.Datetimes=ocd.OCDatetimes(ID,legacy=legacy)
-                if p.endswith('OCProperties.p'):
-                    self.Properties=pickle.load(open(p,'rb'))
-                else:
-                    self.Properties=ocp.OCProperties(ID,legacy=legacy)
-                if p.endswith('OCFiles.p'):
-                    self.Files=pickle.load(open(p,'rb'))
-                else:
-                    self.Files=ocf.OCFiles(ID,legacy=legacy)
-                if p.endswith('OCObservations.p'):
-                    self.Observations=pickle.load(open(p,'rb'))
-                else:
-                    self.Observations=oco.OCObservations(ID,legacy=legacy)                               
-        else:
+        ppath='/Users/wheatley/Documents/Solar/occulted_flares/data/att_data/'+str(ID)+'_att.p'
+        ispickle=glob.glob(ppath)
+        if ispickle !=[] and freload == False:
+            atts=pickle.load(open(ispickle[0],'rb')) #this is the attributes. We need to distribute them now.
+            self.Datetimes=ocd.OCDatetimes(ID,legacy=False,calc_times=calc_times,att_dict=atts['Datetimes'][1])
+            self.Properties=ocp.OCProperties(ID,legacy=False,calc_missing=calc_missing,att_dict=atts['Properties'][3])
+            self.Files=ocf.OCFiles(ID,legacy=False,att_dict=atts['Files'][2],gen=gen)
+            self.Observation=oco.OCObservation(ID,legacy=False,att_dict=atts['Observation'][4])
+            self.Notes= atts['Notes'][5]
+        else: #reload ... ie regenerate the attribute pickle even if there is one. run in //?
             self.Datetimes=ocd.OCDatetimes(ID,legacy=legacy,calc_times=calc_times,filename=filename)
             self.Properties=ocp.OCProperties(ID,legacy=legacy,calc_missing=calc_missing,filename=filename)
-            self.Files=ocf.OCFiles(ID,legacy=legacy,filename=filename)
+            self.Files=ocf.OCFiles(ID,legacy=legacy,filename=filename,gen=gen)
             self.Observation=oco.OCObservation(ID,legacy=legacy,filename=filename)
             self.Notes= [""]
             self.extract_stereo_times()
-        
-    def export2csv(self, filename=False):
-        '''Exports Python dictionary to csv file'''
-        #first get the dictionaries:
-        dtd=self.Datetimes.__dict__
-        fd=self.Files.__dict__
-        od=self.Observation.__dict__
-        pd=self.Properties.__dict__
-        #deal with special cases...is loop a dictionary too?
-        rd=self.Files.Raw
-        folderd=self.Files.folders
 
-        #create headers
-        headers=['ID','Notes']
-        for key in dtd.keys():
-            headers.append('Datetimes.'+key)
-        for key in fd.keys():
-            headers.append('Files.'+key)
-        for key in rd.keys():
-            headers.append('Files.Raw.'+key)
-        for key in folderd.keys():
-            headers.append('Files.folders.'+key)
-        for key in od.keys():
-            headers.append('Observation.'+key)
-        for key in pd.keys():
-            headers.append('Properties.'+key)
+    def att2df(self):
+        '''Store the flare attributes in the database'''
+        #convert to pandas DataFrame
+        df=pd.DataFrame.from_dict([{'ID':self.ID},{'Datetimes':self.Datetimes.__dict__},{'Files':self.Files.__dict__},{'Properties':self.Properties.__dict__},{'Observation':self.Observation.__dict__},{'Notes':self.Notes}])
+        return df
+
+    def jsonify(self,key):
+            '''convert attributes that are numpy.float32 etc to normal floats'''
+            obj=getattr(self,key)
+            for k in obj.__dict__.keys():
+                if type(getattr(obj,k)) == np.float32:
+                    setattr(obj,k,float(getattr(obj,k))) #what if it's a list or dict? deal with that later...
         
-        #gather attributes...
-        attlist=[[self.ID],self.Notes]
-        for val in dtd.values(): #why can't I do the same thing using generators?
-            attlist.append([val])
-        #attlist.append([dtd[key]] for key in dtd.keys())
-        for val in fd.values():
-            attlist.append([val])
-        for val in rd.values():
-            attlist.append([val])
-        for val in folderd.values():
-            attlist.append([val])
-        for val in od.values():
-            attlist.append([val])
-        for val in pd.values():
-            attlist.append([val]) 
-        #onelist=[item for sublist in attlist for item in sublist]  #convert to single list - is the order the same as in the headers?
+    def export2csv(self, filename=False, save=True):
+        '''Exports Python dictionary to csv file. First convert to json to enable normalization'''
+        import json
+        from pandas.io.json import json_normalize
+
+        #prep for json
+        self.Datetimes.convert2string()
+        self.Datetimes.convert2string()                    
+        #self.jsonify('Properties')
+        #self.jsonify('Observation')
+        df=self.att2df()
+       
+        jsonser={'ID':df['ID'][0],'Datetimes':df['Datetimes'][1],'Files':df['Files'][2],'Properties':df['Properties'][3],'Observation':df['Observation'][4],'Notes':df['Notes'][5]}
         
-        from itertools import izip_longest
-            
-        if not filename:
-            filename=str(self.ID)+'.csv'
-        os.chdir(self.Files.dir+self.Files.folders['flare_lists'])
+        #move to json - guess I don't actually have to do this though? can normalize straight from dataframe
+        #json_df=json.dumps(jsonser)
+
+        #normalize
+        norm_df=json_normalize(jsonser)
+
+        if save:
+            if not filename:
+                filename=str(self.ID)+'_att.csv'
+            os.chdir(self.Files.dir+self.Files.folders['flare_lists'])
         
-        import csv
-        with open(filename,'wb') as f:
-            writer=csv.writer(f)
-            writer.writerow(headers)
-            for values in izip_longest(*attlist):
-                writer.writerow(values)
-        os.chdir(self.Files.dir)
-        return headers, attlist
+            import csv
+            with open(filename,'wb') as f:
+                writer=csv.writer(f)
+                writer.writerow(norm_df.keys())
+                writer.writerow([norm_df[k][0] for k in norm_df.keys()])
+            os.chdir(self.Files.dir)
+        else: #for writing a whole list
+            return jsonser
 
     def export2idl(self, savname):
         '''because the dictionaries might be to big to send directly, read it in from the csv file'''
@@ -176,17 +141,18 @@ class OCFlare(object):
         idl('flare_list={ID:foo.field01,Datetimes:{Messenger_datetimes:foo.field02,RHESSI_datetimes:foo.field03,Obs_start_time:foo.field04,Obs_end_time:foo.field05},Flare_properties:{Messenger_T:foo.field06,Messenger_EM1:foo.field07,Messenger_GOES:foo.field08,Messenger_total_counts:foo.field09,RHESSI_GOES:foo.field10,GOES_GOES:foo.field11,RHESSI_total_counts:foo.field12,Location:foo.field13,source_vis:foo.field14},Data_properties:{Messenger_data_path:foo.field15,RHESSI_data_path:foo.field16,XRS_files:foo.field17,QL_images:foo.field18,RHESSI_browser_urls:foo.field19,csv_name:foo.field20,good_det:foo.field21},Angle:foo.field22,Notes:foo.field23}') 
         idl('save,flare_list, filename=savname')
 
-    def export2pickle(self, picklename=False, allp=False):
-        '''Replaces save_flare_list. Saves the data object in a .p file. Option to pickle all the individual objects as well.'''
+    def export2pickle(self, picklename=False, silent=True):
+        '''Replaces save_flare_list. Saves the data frame in a .p file.'''
         import pickle
-        if not picklename:
-            picklename=self.Files.dir+self.Files.folders['flare_lists']+'/'+str(self.ID)+'.p'
-        pickle.dump(self, open(picklename, 'wb'))
-        if allp:
-            self.Datetimes.write()
-            self.Properties.write()
-            self.Observation.write()
-            self.Files.write()
+        if self.Files.att_data == '':
+            picklename=str(self.ID)+'_att.p'
+        else:
+            picklename=self.Files.att_data
+        path=self.Files.dir+self.Files.folders['att_data']+'/'
+        df=self.att2df()
+        pickle.dump(df, open(path+picklename, 'wb'))
+        if not silent:
+            print picklename + ' was created in '+ path
 
     #############################################  DATA READING & STORAGE METHODS  #######################################################
 
@@ -225,32 +191,197 @@ class OCFlare(object):
         '''Downloads Messenger .dat and .lbl files from the database, given event date. Can be used to get missing files too.'''
         import urllib
         dataurl = 'https://hesperia.gsfc.nasa.gov/messenger/'
-        #subfolders by year, month,day (except 2001)
-        listlen = len(self.ID)
-        for i,dt in zip(range(0,listlen -1),self.Datetimes['Messenger_peak'].date()):
-            datestring=dt.strftime('%Y%j')
-            newurl=dataurl+datestring[0:4] #just the year
+        dt =self.Datetimes['Messenger_peak'].date()
+        datestring=dt.strftime('%Y%j')
+        newurl=dataurl+datestring[0:4] #just the year
+
+        #first check if the file is already there:
+        if not self.Files.Raw['xrs_files']:
             filename='/xrs'+datestring
-            datfile=filename+'.dat'
-            lblfile=filename+'.lbl'
-            #first check if the file is already there:
-            if not os.path.exists('/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.dat'):
-                urllib.urlretrieve(newurl+datfile,'/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.dat')
-            if not os.path.exists('/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.lbl'):
-                urllib.urlretrieve(newurl+lblfile,'/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.lbl')
-            #fill in the xrsfilename section
-            if not self.Data_properties['XRS_files'][i]:
-                self.Data_properties['XRS_files'][i]=filename
+            self.Files.Raw['xrs_files']=filename
+        else:
+            filename=self.Files.Raw['xrs_files']
+        datfile=filename+'.dat'
+        lblfile=filename+'.lbl'
+        # check if the file is already there:
+        if not os.path.exists('/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.dat'):
+            urllib.urlretrieve(newurl+datfile,'/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.dat')
+        if not os.path.exists('/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.lbl'):
+            urllib.urlretrieve(newurl+lblfile,'/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.lbl')
+            
+    def gen_Messenger_lightcurve(self, countspersec=True, ret=False,save=True):
+        '''Get data FROM SCRATCH aka IDL for this flare's Messenger lightcurves, and adjust to counts/s if specified (raw = False). Save in new file if requested. Write peak flux and peak time intervals to object.'''
+        import os.path
+        try:
+            import pickle
+            data=pickle.load(open(self.Files.folders['lightcurves']+self.Files.Raw['messenger'],'rb'))
+            countspersec=False #assume it's already been fixed
+            save=False
+        except IOError:
+
+            self.Datetimes.convert2string() #to make IDL easier
+
+            import pidly
+            idl = pidly.IDL('/Users/wheatley/Documents/Solar/sswidl_py.sh')
+            idl(".compile lightcurves.pro")
+            idl('ft',[self.Datetimes.lc_start_time,self.Datetimes.lc_end_time])
+            idl('ebinlow',[1.5,12.4])
+            idl('ebinhigh',[3,25])
+            idl('xrs_file',self.Files.Raw['xrs_files'])
+            idl('clow=one_curve_M(ft,xrs_file,ebinlow,quiet=1)') #returns data={taxis:taxis,phigh:phigh}
+            idl('chigh=one_curve_M(ft,xrs_file,ebinhigh,quiet=1)') #returns data={taxis:taxis,phigh:phigh}
+            clow=idl.clow
+            chigh=idl.chigh
+            idl.close() #could probably speed this up if I get the idl bridge to work, then don't have to open and close a session each time
+            Mtiml=[]
+            for t in clow['taxis']: Mtiml.append(dt.strptime(t,'%d-%b-%Y %H:%M:%S.%f')) #fix messenger times to datetimes
+
+            #since OSPEX ignores my time interval commands, fix it here:
+            startidx=np.searchsorted(Mtiml,dt.strptime(self.Datetimes.lc_start_time,'%d-%b-%Y %H:%M:%S.000'))
+            endidx=np.searchsorted(Mtiml,dt.strptime(self.Datetimes.lc_end_time,'%d-%b-%Y %H:%M:%S.000'))
+            
+            data={'taxis':Mtiml[startidx-1:endidx+1],'lowEcounts':clow['phigh'][startidx-1:endidx+1],'highEcounts':chigh['phigh'][startidx-1:endidx+1]} # +-1 there because time bins are so big... better to have more than less
+
+        if len(data['taxis']) !=0:
+            #adjust to counts per second if requested
+            if countspersec:
+                #get the time bin for each data point
+                tlow=data['taxis']
+                mlenl=len(tlow)
+                #thigh=chigh['taxis'] #should be the same in theory, but do this just in case
+                #mlenh=len(thigh)
+                Mtiml,Mtimh,cps1,cps2=[],[],[],[]
+                for t in tlow: Mtiml.append(t) #it's already a datetime now
+                #for t in thigh: Mtimh.append(dt.strptime(t,'%d-%b-%Y %H:%M:%S.%f')) #fix messenger times to datetimes         
+
+                for i in range(mlenl-1):
+                    tbin=Mtiml[i+1]-Mtiml[i] #timedelta object in seconds
+                    cps1.append(data['lowEcounts'][i]/tbin.total_seconds())
+                    cps2.append(data['highEcounts'][i]/tbin.total_seconds())
+        
+                data={'taxis':Mtiml,'lowEcounts':cps1,'highEcounts':cps2}
+
+            #now get the peaks and time bins, write to object
+            lpeak=np.searchsorted(data['lowEcounts'],np.max(data['lowEcounts'])) #gives index of the peak
+            hpeak=np.searchsorted(data['highEcounts'],np.max(data['highEcounts']))
+            #get time range around peak...should I take the time before or after the peak? let's do after to be consistent with the plotting method...
+
+            #store stuff
+            self.Datetimes.Messenger_peak = data['taxis'][hpeak]
+            try:
+                self.Datetimes.messenger_peak_bin['long'] = [data['taxis'][lpeak],data['taxis'][lpeak+1]]
+                self.Datetimes.messenger_peak_bin['short'] = [data['taxis'][hpeak],data['taxis'][hpeak+1]]#for use with gen_GOES_lightcurve to have a more accurate peak value in GOES
+            except IndexError: #in case the last value is the max
+                self.Datetimes.messenger_peak_bin['long'] = [data['taxis'][lpeak-1],data['taxis'][lpeak]]
+                self.Datetimes.messenger_peak_bin['short'] = [data['taxis'][hpeak-1],data['taxis'][hpeak]]
+            #print self.Datetimes.messenger_peak_bin
+            
+            self.Properties.Messenger_GOES_long=np.max(data['lowEcounts'])
+            #self.Properties.Messenger_GOES=np.max(data['highEcounts']) #for now! since it's counts and we want flux
+
+            #pickle it up if requested, save filename and location to object
+            if save:
+                import pickle
+                fdir=self.Files.dir+self.Files.folders['lightcurves']
+                filename= '/'+str(self.ID)+'_Mess_lc.p' #something
+                self.Files.Raw['messenger']=filename
+                pickle.dump(data,open(fdir+filename,'wb'))
+                print 'File '+filename+' saved in '+fdir
+
+        else:
+            print 'No data available for flare ' + str(self.ID)
+            
+        os.chdir(self.Files.dir)
+        self.Datetimes.convert2datetime() 
+        #print self.Datetimes.messenger_peak_bin
+        
+        if ret:
+            return data
+        
+    def gen_GOES_lightcurve(self, ret=False,save=True):
+        '''Get data FROM SCRATCH aka IDL for this flare's GOES lightcurves. Save in new file if requested. Write peak flux  to object.'''
+        import os.path
+        try:
+            import pickle
+            data=pickle.load(open(self.Files.folders['lightcurves']+self.Files.Raw['goes'],'rb'))
+            save=False
+        except IOError:
+            self.Datetimes.convert2string() #to make IDL easier
+
+            import pidly
+            idl = pidly.IDL('/Users/wheatley/Documents/Solar/sswidl_py.sh')
+            idl(".compile lightcurves.pro")
+            idl('ft',[self.Datetimes.lc_start_time,self.Datetimes.lc_end_time])
+            idl('d=one_curve_G(ft,quiet=1)') #returns data={taxis:taxis,phigh:phigh}
+            d=idl.d
+            idl.close()
+            if d== -1:
+                print 'no data in array for flare ' + str(self.ID)
+                return
+            Mtiml=[]
+            for t in d['tarray']: Mtiml.append(dt.strptime(t,'%d-%b-%Y %H:%M:%S.%f')) #fix messenger times to datetimes
+
+            data={'taxis':Mtiml,'lowEflux':d['ydata'][0],'highEflux':d['ydata'][1]}
+
+            self.Datetimes.convert2datetime() 
+
+        #now get the peaks and time bins, write to object
+        binlong=self.Datetimes.messenger_peak_bin['long']
+        lidx=[]
+        for i in range(0,len(data['taxis'])-1):
+            if data['taxis'][i] > binlong[0] and data['taxis'][i] < binlong[1]:
+                lidx.append(i) #the index of the value
+        lrange=[lidx[0],lidx[len(lidx)-1]]
+        if lrange[0]==lrange[1]: #don't allow this!
+            lrange=[lidx[0]-1,lidx[0]]
+            
+        lpeak=np.searchsorted(data['lowEflux'][lrange[0]:lrange[1]],np.max(data['lowEflux'][lrange[0]:lrange[1]])) #gives index of peak IN DESIRED RANGE
+        lpeaktime=data['taxis'][lidx[0]+lpeak] #gives time at actual peak
+        lpeakflux=data['lowEflux'][lidx[0]+lpeak] #gives flux at actual peak
+        
+        binshort=self.Datetimes.messenger_peak_bin['short']
+        sidx=[]
+        for i in range(0,len(data['taxis'])-1):
+            if data['taxis'][i] > binshort[0] and data['taxis'][i] < binshort[1]:
+                sidx.append(i) #the index of the value
+        #sidx=np.where(data['taxis'] > binshort[0] and data['taxis'] < binshort[1])
+        srange=[sidx[0],sidx[len(sidx)-1]]
+        if srange[0]==srange[1]: #don't allow this!
+            srange=[sidx[0]-1,sidx[0]]
+        speak=np.searchsorted(data['highEflux'][srange[0]:srange[1]],np.max(data['highEflux'][srange[0]:srange[1]])) #gives index of peak IN DESIRED RANGE
+        speaktime=data['taxis'][sidx[0]+speak] #gives time at actual peak
+        speakflux=data['highEflux'][sidx[0]+speak] #gives flux at actual peak
+ 
+        #store stuff
+        self.Datetimes.Messenger_peak = speaktime
+        self.Datetimes.Messenger_peak_long = lpeaktime
+        self.Properties.GOES_GOES_long=lpeakflux
+        self.Properties.GOES_GOES=speakflux
+
+        #pickle it up if requested, save filename and location to object
+        if save:
+            import pickle
+            fdir=self.Files.dir+self.Files.folders['lightcurves']
+            filename= '/'+str(self.ID)+'_GOES_lc.p' #something
+            self.Files.Raw['goes']=filename
+            pickle.dump(data,open(fdir+filename,'wb'))
+            print 'File '+filename+' saved in '+fdir
+                                
+        os.chdir(self.Files.dir)
+        #self.Datetimes.convert2datetime() 
+        
+        if ret:
+            return data
 
     def get_Messenger_lightcurve(self, filename=False, raw=False, save=False):
         '''Get data for this flare's Messenger lightcurve, and adjust to counts/s if specified (raw = False). Save in new file if requested.'''
         os.chdir(self.Files.dir + self.Files.folders['lightcurves'])        
-        if self.Files.Raw['lightcurves'].endswith('.p'):
-            pickle.load(self.Files.Raw['spectrogram']) #restore and be done. should be a mySpectrogram object
-            os.chdir(self.Files.dir)
-            return #think I probably have to assign a variable name...
+        if self.Files.Raw['messenger'].endswith('.p'):
+            Mdata= pickle.load(self.Files.Raw['messenger']) #restore and be done. should be a mySpectrogram object
+            #os.chdir(self.Files.dir)
+            #return Mdata#think I probably have to assign a variable name...
             
-        if self.Files.Raw['spectrogram'] == '': #get it from the sav file
+        elif self.Files.Raw['spectrogram'] == '': #get it from the sav file
             if not filename: filename='rerun_sgrams.sav'
             from scipy.io import readsav
             os.chidr('../')
@@ -273,11 +404,11 @@ class OCFlare(object):
             M1=Mdata['phigh'][0][n][0:mlen-1]
             M2=Mdata['phigh'][0][n+nflares-1][0:mlen-1]
 
-        for i in range(mlen-1):
-            tbin=Mtim[i+1]-Mtim[i] #timedelta object in seconds
-            cps1.append(M1[i]/tbin.total_seconds())
-            cps2.append(M2[i]/tbin.total_seconds())
-        return cps1,cps2
+            for i in range(mlen-1):
+                tbin=Mtim[i+1]-Mtim[i] #timedelta object in seconds
+                cps1.append(M1[i]/tbin.total_seconds())
+                cps2.append(M2[i]/tbin.total_seconds())
+            return cps1,cps2
 
         if not Raw:
             #adjust counts
@@ -295,12 +426,12 @@ class OCFlare(object):
     def get_GOES_lightcurve(self, filename=False, save=False):
         '''Get data for this flare's GOES lightcurve. Save in new file if requested.'''
         os.chdir(self.Files.dir + self.Files.folders['lightcurves'])        
-        if self.Files.Raw['lightcurves'].endswith('.p'):
-            pickle.load(self.Files.Raw['spectrogram']) #restore and be done. should be a mySpectrogram object
-            os.chdir(self.Files.dir)
-            return #think I probably have to assign a variable name...
+        if self.Files.Raw['goes'].endswith('.p'):
+            Gdata=pickle.load(self.Files.Raw['goes']) #restore and be done. should be a mySpectrogram object
+            #os.chdir(self.Files.dir)
+            #return Gdata#think I probably have to assign a variable name...
             
-        if self.Files.Raw['spectrogram'] == '': #get it from the sav file
+        elif self.Files.Raw['spectrogram'] == '': #get it from the sav file
             if not filename: filename='rerun_sgrams.sav'
             from scipy.io import readsav
             os.chidr('../')
@@ -379,20 +510,20 @@ class OCFlare(object):
         if AIA:
             instr= vso.attrs.Instrument('AIA')
             sample = vso.attrs.Sample(24 * u.hour)
-            if wave == '171': wave = vso.attrs.Wave(16.9 * u.nm, 17.2 * u.nm)
-            elif wave == '193': wave = vso.attrs.Wave(19.1 * u.nm, 19.45 * u.nm)
-            elif wave == '304': wave = vso.attrs.Wave(30 * u.nm, 31 * u.nm)            
+            if wave == '171': wave = vso.attrs.Wavelength(16.9 * u.nm, 17.2 * u.nm)
+            elif wave == '193': wave = vso.attrs.Wavelength(19.1 * u.nm, 19.45 * u.nm)
+            elif wave == '304': wave = vso.attrs.Wavelength(30 * u.nm, 31 * u.nm)            
             time = vso.attrs.Time(dt.strftime(self.Datetimes.Messenger_peak,'%Y-%m-%dT%H:%M:%S'),dt.strftime(self.Datetimes.Messenger_peak +td(seconds=2),'%Y-%m-%dT%H:%M:%S')) #should have data to within 1 s
             res=vc.query(wave, sample, time, instr)
         if STEREO:
             source=vso.attrs.Source('STEREO_'+self.Observation.STEREO) #this should be a string
             instr= vso.attrs.Instrument('EUVI')
-            wave = vso.attrs.Wave(19.1 * u.nm, 19.45 * u.nm) #193
+            wave = vso.attrs.Wavelength(19.1 * u.nm, 19.45 * u.nm) #193
             time = vso.attrs.Time(dt.strftime(self.Datetimes.Messenger_peak+td(minutes=timedelay),'%Y-%m-%dT%H:%M:%S'),dt.strftime(self.Datetimes.Messenger_peak +td(minutes=timedelay+15),'%Y-%m-%dT%H:%M:%S')) #have to look 15 minutes after designated timedelay?
-            res=vc.query(wave, source, time, instr)
+            res=vc.search(wave, source, time, instr)
 
-        if not path: files = vc.get(res,path='/Users/wheatley/Documents/Solar/occulted_flares/data/stereo-aia/{file}').wait()
-        else: files = vc.get(res,path=path+'{file}').wait()
+        if not path: files = vc.fetch(res,path='/Users/wheatley/Documents/Solar/occulted_flares/data/stereo-aia/{file}').wait()
+        else: files = vc.fetch(res,path=path+'{file}').wait()
         #put filenames in Files object
         if AIA:
             self.Files.Raw['aia'] = files[0]
@@ -468,7 +599,7 @@ class OCFlare(object):
                 maps.append({f.instrument: f.submap(SkyCoord((-1100, 1100) * u.arcsec, (-1100, 1100) * u.arcsec,frame=f.coordinate_frame))})
             else:
                 for f in sunpy.map.Map(files):
-                    maps.append({f.instrument: f.submap(SkyCoord((-1100, 1100) * u.arcsec, (-1100, 1100) * u.arcsec,frame=coordinate_frame))}) #this could be empty if files is empty
+                    maps.append({f.instrument: f.submap(SkyCoord((-1100, 1100) * u.arcsec, (-1100, 1100) * u.arcsec,frame=f.coordinate_frame))}) #this could be empty if files is empty
                 self.extract_stereo_times()
         else: print 'No files found and no maps made!'
         
@@ -599,6 +730,51 @@ class OCFlare(object):
         
             
     ################################################# INDIVIDUAL PLOT METHODS  ###########################################################
+    def plot_GM_otf(self, save=False):
+        '''Plot lightcurves on-the-fly'''
+        import matplotlib.dates as mdates
+
+        #although no reason not to be smart and look for the files first
+        try:
+            if self.Files.Raw['messenger'] != '':
+                Mdata=pickle.load(open(self.Files.folders['lightcurves']+self.Files.Raw['messenger'],'rb'))
+            else:
+                Mdata=self.gen_Messenger_lightcurve(ret=True)
+        except KeyError:
+            Mdata=self.gen_Messenger_lightcurve(ret=True)
+        try:
+            if self.Files.Raw['goes'] != '':
+                Gdata=pickle.load(open(self.Files.folders['lightcurves']+self.Files.Raw['goes'],'rb'))
+            else:
+                Gdata=self.gen_GOES_lightcurve(ret=True)
+        except KeyError:
+            Gdata=self.gen_GOES_lightcurve(ret=True)
+                        
+        fig,ax1=plt.subplots()
+        ax2=ax1.twinx()
+        l1,=ax1.step(Mdata['taxis'][:-1],Mdata['lowEcounts'],'b',label= '1.5-12.4 keV')
+        l2,=ax1.step(Mdata['taxis'][:-1],Mdata['highEcounts'],'g',label= '3-24.8 keV')
+        l3,=ax2.plot(Gdata['taxis'],Gdata['lowEflux'],'k',label='GOES 1-8 $\AA$') #goes short - plot with
+        l4,=ax2.plot(Gdata['taxis'],Gdata['highEflux'],'m',label='GOES .5-4 $\AA$') #goes long
+
+        myFmt = mdates.DateFormatter('%H:%M')
+        ax1.xaxis.set_major_formatter(myFmt)
+        plt.gcf().autofmt_xdate()
+        #ax1.set_xlabel(dt.strftime(Mtim[0].date(),'%Y-%b-%d'))
+        ax1.set_ylabel('Messenger counts $cm^{-2} keV^{-1} s^{-1}$')
+        ax1.set_ylim([10**0,10**4])
+        ax1.set_yscale('log')
+        ax2.set_ylabel('GOES Flux W$m^{-2}$')
+        ax2.set_yscale('log')
+    
+        plt.title(dt.strftime(Mdata['taxis'][0].date(),'%Y-%b-%d'))
+        ax1.set_xlim([Gdata['taxis'][0],Gdata['taxis'][-1]])
+        #plt.legend((l1,l2,l3,l4),(l1.get_label(),l2.get_label(),l3.get_label(),l4.get_label()),loc='upper left',prop={'size':12})
+        fig.show()
+        if save:
+            fname='data/lightcurves/'+dt.strftime(Mdata['taxis'][0].date(),'%Y-%b-%d')+'MG.png'
+            fig.savefig(fname)
+            #return glong,gshort
 
     def plot_GM(Mdata,Gdata,n): #will probably have to deal with times to make them all the same...
         import matplotlib.dates as mdates

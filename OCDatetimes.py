@@ -22,6 +22,8 @@ class OCDatetimes(object):
             Spec_end_time
             lc_start_time
             lc_end_time
+            messenger_peak_bin
+            Messenger_peak_long
             pf_loop_time
             stereo_start_time
             stereo_times
@@ -29,8 +31,14 @@ class OCDatetimes(object):
             format_datetimes() to format for reading from/exporting to csv/sav
             extend_time_int() does the time interval extensions
             '''
-    def __init__(self, ID,legacy=True,filename=False, calc_times=False):
+    def __init__(self, ID,legacy=True,filename=False, calc_times=False, att_dict=False):
         '''Initialize the object, given the flare ID. This requires use of the OCFiles object I think...'''
+        if att_dict: #distribute these
+            legacy=False
+            calc_times=False
+            for k in att_dict.keys():
+                setattr(self,k,att_dict[k]) #types?
+            
         if legacy: #get info from legacy OCData object and the associated csv/sav files
             if not filename:
                 filename= '/Users/wheatley/Documents/Solar/occulted_flares/flare_lists/list_final.csv'#default file to read
@@ -69,23 +77,31 @@ class OCDatetimes(object):
                 self.stereo_times=data["stereo_times"][i]
             except KeyError:
                 self.stereo_times=[self.Obs_start_time,self.Obs_end_time]
+            try:                
+                self.Messenger_peak_long=data["Messenger_datetimes"][i]
+            except KeyError:
+                self.Messenger_peak_lon=self.Messenger_peak
+            try:                
+                self.messenger_peak_bin={'long':[data["messenger_peak_bin_start"][i],data["messenger_peak_bin_end"][i]],'short':[data["messenger_peak_bin_start"][i],data["messenger_peak_bin_end"][i]]}
+            except KeyError:
+                self.messenger_peak_bin={'long':[self.Obs_start_time,self.Obs_end_time],'short':[self.Obs_start_time,self.Obs_end_time]}
 
-        if not legacy:
-            #read datetimes csv file (can just restore the pickle file otherwise. Build this into OCFlare class):
-            import pandas as pd
-            if filename: #it's the big one
-                data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
-                #i=self.get_index(ID,data) #get the index of the flare if it's in a list
-                for key in data.keys(): #only do this if it starts with Observation
-                    if key.startswith('Datetimes.'):
-                        dat=data[key]
-                        key=key[key.find('.')+1:] #trim it
-                        setattr(self,key,dat.values[0])
-            if not filename:
-                filename= '/Users/wheatley/Documents/Solar/occulted_flares/objects/'+str(ID)+'OCDatetimes.csv'#default file to read
-                data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
-                for key in data.keys(): #only do this if it starts with Observation
-                    setattr(self,key,data.values[0])
+        #if not legacy:
+        #    #read datetimes csv file (can just restore the pickle file otherwise. Build this into OCFlare class):
+        #    import pandas as pd
+        #    if filename: #it's the big one
+        #        data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
+        #        #i=self.get_index(ID,data) #get the index of the flare if it's in a list
+        #       for key in data.keys(): #only do this if it starts with Observation
+        #            if key.startswith('Datetimes.'):
+        #                dat=data[key]
+        #                key=key[key.find('.')+1:] #trim it
+        #                setattr(self,key,dat.values[0])
+        #    if not filename:
+        #        filename= '/Users/wheatley/Documents/Solar/occulted_flares/objects/'+str(ID)+'OCDatetimes.csv'#default file to read
+        #        data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
+        #        for key in data.keys(): #only do this if it starts with Observation
+        #            setattr(self,key,data.values[0])
                  
         self.convert2datetime()
         #update the OCFiles object with the file used to generate this instance of the object
@@ -99,6 +115,12 @@ class OCDatetimes(object):
         '''Returns a generator that iterates over the object - not sure if it's needed here but whatever'''
         for attr, value in self.__dict__.iteritems():
             yield attr, value
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self,type,value,tb):
+        print 'OCDatetimes object closed'
 
     def write(self, picklename=False):
         '''Write object to pickle'''
@@ -135,7 +157,7 @@ class OCDatetimes(object):
             self.lc_end_time= dt.strptime(data['UT'][i][last],'%d-%b-%Y %H:%M:%S.000') 
         except ValueError:
             import datetime
-            self.lc_end_time = start + datetime.timedelta(seconds=time_axis[-1])
+            self.lc_end_time = self.lc_start_time + datetime.timedelta(minutes=30)
         self.spec_start_time=self.lc_start_time
         self.spec_end_time=self.lc_end_time
         self.spec_end_time=self.lc_end_time
@@ -163,44 +185,93 @@ class OCDatetimes(object):
         ffile=filename
         #open it in IDL? or can read a fits file in Python... probably. should be in the header info one would hope
         from sunpy import io as sio
-        head=sio.fits.get_header(ffile[0])
-        self.pf_loop_time = dt.strptime(head[0]['DATE-OBS'].replace('T',' ')[:-3]+'000','%Y-%m-%d %H:%M:%S.000')#convert to datetime
-    
+        try:
+            head=sio.fits.get_header(ffile[0])
+            self.pf_loop_time = dt.strptime(head[0]['DATE-OBS'].replace('T',' ')[:-3]+'000','%Y-%m-%d %H:%M:%S.000')#convert to datetime
+        except IndexError:
+            self.pf_loop_time = ''
+            
     def convert2datetime(self):
         '''If it's a string make it a datetime'''
         for a in dir(self):
-            if not a.startswith('__') and not callable(getattr(self,a)) and type(getattr(self,a)) == str:
+            if not a.startswith('__') and not callable(getattr(self,a)):
                 val=getattr(self,a)
-                #print a,val
-                if val == '':
-                    fc=''
-                elif ('AM' or 'PM') in val:
-                    fc = '%m/%d/%y %I:%M:%S %p'
-                elif '/' in val:
-                    fc = '%m/%d/%y %H:%M:%S.00'
-                elif re.search('[a-z]', val) is not None: #not None if there is a letter
-                    fc ='%d-%b-%Y %H:%M:%S.000' #current format code - might need to add .000
-                else: #it's come straight from idl ....
-                    fc ='%Y-%m-%d %H:%M:%S'
-                if fc != '':
-                    if val.startswith("'"):
-                        try:
-                            setattr(self,a,dt.strptime(val[1:-1], fc))
-                        except ValueError:
-                            fc=fc ='%d-%b-%Y %H:%M:%S.000'
-                            setattr(self,a,dt.strptime(val[1:-1], fc))
-                    else:
-                        try:
-                            setattr(self,a,dt.strptime(val, fc))
-                        except ValueError:
-                            pass
-                            #fc=fc ='%d-%b-%Y %H:%M:%S.000'
-                            #setattr(self,a,dt.strptime(val, fc))
+                if type(val) == str:
+                    setattr(self,a,self._do_convert(val))
+                if type(val) == dict:
+                    newd={}
+                    for k in val.keys():
+                        if type(val[k]) == list:
+                            newlist=[]
+                            for litem in val[k]:
+                                newlist.append(self._do_convert(litem))
+                            newd[k]=newlist
+                        else:
+                            newd[k]=self._do_convert(val[k]) #do I have to set the attribute again after this?
+                    setattr(self,a,newd)
+                    
+    def _do_convert(self,val):
+        if type(val) == dt or val is None or val == '':
+            return val
+        elif ('AM' or 'PM') in val:
+            fc = '%m/%d/%y %I:%M:%S %p'
+        elif '/' in val:
+            fc = '%m/%d/%y %H:%M:%S.00'
+        elif re.search('[a-z]', val) is not None: #not None if there is a letter
+            fc ='%d-%b-%Y %H:%M:%S.000' #current format code - might need to add .000
+        else: #it's come straight from idl ....
+            fc ='%Y-%m-%d %H:%M:%S'
+        if fc != '':
+            if val.startswith("'"):
+                try:
+                    valc=dt.strptime(val[1:-1], fc)
+                except ValueError:
+                    fc=fc ='%d-%b-%Y %H:%M:%S.000'
+                    valc=dt.strptime(val[1:-1], fc)
+            else:
+                try:
+                    valc=dt.strptime(val, fc)
+                except ValueError:
+                    pass
+                    #fc=fc ='%d-%b-%Y %H:%M:%S.000'
+                    #setattr(self,a,dt.strptime(val, fc))
+        return valc
 
     def convert2string(self):
         '''If it's a datetime make it a string'''
+        fc='%d-%b-%Y %H:%M:%S.000'
         for a in dir(self):
             if not a.startswith('__') and not callable(getattr(self,a)) and type(getattr(self,a)) == dt:
                 val=getattr(self,a)
-                fc='%d-%b-%Y %H:%M:%S.000'
+                #fc='%d-%b-%Y %H:%M:%S.000'
                 setattr(self,a,dt.strftime(val,fc))
+            elif type(getattr(self,a)) == dict:
+                val=getattr(self,a)
+                newd={}
+                for k in val.keys():
+                    item=val[k]
+                    if type(item) == list:
+                        newlist=[]
+                        for litem in item:
+                            if type(litem) == dt:
+                                newlist.append(dt.strftime(litem,fc))
+                            else:
+                                newlist.append(litem)
+                        newd[k]=newlist
+                    elif type(item) == dt:
+                        newd[k]=dt.strftime(item,fc)
+                    else:
+                        newd[k]=item
+                setattr(self,a,newd)
+            elif type(getattr(self,a)) == list:
+                #fc='%d-%b-%Y %H:%M:%S.000'
+                val=getattr(self,a)
+                newlist=[]
+                for item in val:
+                    if type(item) == dt:
+                        newlist.append(dt.strftime(item,fc))
+                    else:
+                        newlist.append(litem)
+                setattr(self,a,newlist)
+                
+            

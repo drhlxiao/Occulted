@@ -10,39 +10,40 @@ import os
 import pickle
 import glob
 import OCFlare
+import pandas as pd
 
 
 class OCFlareList(object):
     ''' This object will have the following attributes:
-            List of OCFlare objects
+            List/Series of OCFlare objects
             Notes
         Methods will include:
             All selection/filtering/sorting methods
             All the plotting methods
             All statistics methods
      '''
-    def __init__(self, IDs=True, folder=False,calc_times=False, calc_missing=False,gen=False):
+    def __init__(self, IDs=True, folder=False, freload=False,calc_times=False, calc_missing=False,gen=False,filename=False):
         '''Options to initialize from list of flare IDs, file with column of flare IDs, or directory with object pickle files in them?'''
         self.list=[]
         if IDs and type(IDs) == list:
             #initialize from list of flare IDs
             for i in IDs:
-                if os.path.isfile(str(i)+'OCFlare.p'):
+                if os.path.isfile(str(i)+'OCFlare.p') and not freload:
                     self.list.append(pickle.load(open(str(i)+'OCFlare.p','rb')))
                 else:
                     #initialize all the other objects from the default legacy files?
-                    self.list.append(OCFlare.OCFlare(i,calc_times=calc_times, calc_missing=calc_missing,gen=gen))
+                    self.list.append(OCFlare.OCFlare(i,calc_times=calc_times, calc_missing=calc_missing,gen=gen,filename=filename))
         elif IDs and type(IDs) == str:
             #assume it's a csv or sav file that has a column of flare ids in it
             import data_management2 as d
             #with d.OCData(IDs) as o: #sadly doesn't work, let's do manual cleanup then:
             o = d.OCData(IDs)
             for i in o.ID:
-                self.list.append(OCFlare.OCFlare(i,calc_times=calc_times, calc_missing=calc_missing,gen=gen, legacy=True, from_csv=IDs))
+                self.list.append(OCFlare.OCFlare(i,calc_times=calc_times, calc_missing=calc_missing,gen=gen, legacy=True, filename=IDs))
             del o
-            
-        if folder:
-            #restore all the Flare pickle files and combine into list
+
+        if folder and not freload:
+            #restore all the Flare pickle files and combine into list ... need to revise this now that they are not objects!
             os.chdir(folder)
             pickles=sorted(glob.glob('*.p')) #sorted by name... may want to change that, or change my ID naming convention
             for p in pickles:
@@ -50,17 +51,30 @@ class OCFlareList(object):
             os.chdir('/Users/wheatley/Documents/Solar/occulted_flares')
 
         self.Notes=['']*len(self.list) #list of empty strings with the same length as flare list
+        #convert into Pandas series
+        self.list=pd.Series(self.list, name='Flares')
+        self.Notes=pd.Series(self.Notes, name='Notes')        
 
     def write(self,picklename=False):
+        '''Pickle flare list object'''
         import pickle
+        if not picklename:
+            picklename=raw_input('What do you want to name your file? ')
         pickle.dump(self, open(picklename, 'wb'))
+        print picklename + ' was created in '+ os.getcwd()
+
+    def writeIDs(self,picklename=False):
+        '''Pickle flare list IDs, to make initiation faster'''
+        import pickle
+        if not picklename:
+            picklename=raw_input('What do you want to name your file? ')
+        pickle.dump(self.isolate_att('ID'), open(picklename, 'wb'))
+        print picklename + ' was created in '+ os.getcwd()
 
     def __iter__(self):
         '''Returns a generator that iterates over the object'''
         for attr, value in self.__dict__.iteritems():
             yield attr, value
-
-    #def slice(self, indices): #this is deprecated because now each flare is an individual object
 
     def select_outliers(self, angle=90.,threshold=10.): #greater than given angle... need to fix bug/feature with ratio
         '''Select certain flares from the list to be examined in visually'''
@@ -100,25 +114,66 @@ class OCFlareList(object):
                 alist.append(getattr(self.list[i],'ID'))
         return alist
 
+    def att2df(self, flattened=False):
+        '''Store the flare attributes in one large, flattened, data frame instead of several small ones'''
+        from pandas.io.json import json_normalize
+        dfs=[]
+        for f in self.list: #all the DataFrames
+            dfs.append(f.att2df())
+                   #current problem is that each dictionary is stored in the same index in its dataframe. So concatenating the dataframes gives the wrong indexing. We basically need to build a new, re-formatted data frame out of the old ones.
+        nid=[df['ID'][0] for df in dfs]
+        ndt=[df['Datetimes'][1] for df in dfs]
+        nf=[df['Files'][2] for df in dfs]
+        npp=[df['Properties'][3] for df in dfs]
+        no=[df['Observation'][4] for df in dfs]
+        nn=[df['Notes'][5] for df in dfs]
+        
+        dfid=pd.DataFrame(nid,index=np.arange(len(self.list)),columns=['ID']).to_dict(orient='series')
+        dfdt=pd.DataFrame(ndt,index=np.arange(len(self.list)),columns=ndt[0].keys()).to_dict(orient='series')
+        dff=pd.DataFrame(nf,index=np.arange(len(self.list)),columns=nf[0].keys()).to_dict(orient='series')
+        dfp=pd.DataFrame(npp,index=np.arange(len(self.list)),columns=npp[0].keys()).to_dict(orient='series')
+        dfo=pd.DataFrame(no,index=np.arange(len(self.list)),columns=no[0].keys()).to_dict(orient='series')
+        dfn=pd.DataFrame(nn,index=np.arange(len(self.list)),columns=['Notes']).to_dict(orient='series')
+
+        onedict={'ID':dfid,'Datetimes':dfdt,'Files':dff,'Properties':dfp,'Observation':dfo,'Notes':dfn}
+        oneframe=pd.DataFrame.from_dict(onedict)#dfid.join(dfdt.join(dff.join(dfp.join(dfo.join(dfn)))))
+
+        if flattened: #flatten it because json won't cooperate
+            flatdict={}
+            for tk in onedict.keys(): #top level of keys
+                if len(onedict[tk]) ==1: #notes or ID
+                    flatdict[tk]=onedict[tk][tk].tolist()
+                else:
+                    for sk in onedict[tk].keys():
+                        if type(onedict[tk][sk][0]) != dict:
+                            flatdict[tk+'.'+sk]=onedict[tk][sk].tolist()
+                        else: #flatten even more
+                            for ssk in onedict[tk][sk][0].keys():
+                                flatdict[tk+'.'+sk+'.'+ssk]=[onedict[tk][sk][i][ssk] for i in range(0,len(onedict[tk][sk]))]                                
+            return flatdict
+        else:
+            return oneframe
+    
     def export2csv(self, filename):
         '''Exports flare list attributes to csv file'''
-        for flare,i in enumerate(self.list):
-            if i==0:
-                headers=flare.export2csv()[0]
-                attlist=flare.export2csv()[1]
-            attlist.append(flare.export2csv()[1])
-
-        from itertools import izip_longest
+        from pandas.io.json import json_normalize
+        onenorm= self.att2df(flattened=True)
             
         os.chdir(self.list[0].Files.dir+self.list[0].Files.folders['flare_lists'])
         
         import csv
         with open(filename,'wb') as f:
             writer=csv.writer(f)
-            writer.writerow(headers)
-            for values in attlist:
-                writer.writerow(values)
+            writer.writerow(onenorm.keys())
+            for i in range(0,len(onenorm['ID'])):
+                writer.writerow([onenorm[k][i] for k in onenorm.keys()])        
         os.chdir(self.list[0].Files.dir)
+        #return onenorm
+
+    def update(self):
+        '''re-write attribute pickles for each flare in list'''
+        for f in self.list:
+            f.export2pickle()         
 
 ####################################################  PLOT METHODS  ##################################################################
 
@@ -215,18 +270,23 @@ class OCFlareList(object):
         if show:
             fig.show()
             
-    def plot_goes_messenger(self,title= "",ymin=10**-10, ymax=10**-3, minangle=False,maxangle=False,labels=1,loglog=True, loc=False, scatter = True,cc='GOES',save=False,show=True):
+    def plot_goes_messenger(self,title= "",ymin=10**-9, ymax=10**-3, minangle=False,maxangle=False,labels=0,loglog=True, loc=True, scatter = True,cc='GOES',save=False,show=True, channel='short', line=False, linexlim=False):
         '''make a plot of the Messenger_GOES vs GOES_GOES'''
         import matplotlib.patches as mpatches
+        from datetime import datetime
 
         mc=self.isolate_att("Messenger_GOES")
-        gc=self.isolate_att("GOES_GOES")
+        if channel == 'short':
+            gc=self.isolate_att("GOES_GOES")
+        else:
+            gc=self.isolate_att("GOES_GOES_long")
+            
         angles=self.isolate_att("Angle")
         if loc:
             location=self.isolate_att("source_pos")
         else:
             location=np.arange(len(mc)) #just an array of meaningless numbers
-        if labels ==1:
+        if labels !=2:
             ids=self.isolate_att("ID")
         else:
             ids=self.isolate_att("Messenger_peak")
@@ -244,9 +304,9 @@ class OCFlareList(object):
         
         for mval,gval,ID,ang,l in zip(mc,gc,ids,angles,location): 
             app=False
-            if gval != 0.00 and gval !=np.nan and gval > 0.0:
+            if not np.isnan(gval) and gval >1e-09 and not np.isnan(mval) and mval > 0:
                 if not loc and not minangle and not maxangle:app= True
-                if loc and minangle and l != '[0,0]' and l != '' and type(l) == str and ang > minangle: app = True
+                elif loc and minangle and l != '[0,0]' and l != '' and type(l) == str and ang > minangle: app = True
                 elif loc and maxangle and l != '[0,0]' and l != '' and type(l) == str and ang < maxangle: app = True
                 elif loc and not minangle and not maxangle and l != '[0,0]' and l != '' and type(l) == str: app = True
                     
@@ -259,8 +319,14 @@ class OCFlareList(object):
                         #now determine details of color coding etc
                         if cc=='GOES':
                             idx=-int(np.floor(np.log10(gval))) # int from <9 to >4
+                            if idx <=4: colors.append('r')
+                            elif idx >=9: colors.append('k')
+                            else: colors.append(classes[idx-5])
                         elif cc=='Messenger':
                             idx=-int(np.floor(np.log10(mval))) # int from <9 to >4
+                            if idx <=4: colors.append('r')
+                            elif idx >=9: colors.append('k')
+                            else: colors.append(classes[idx-5])
                         elif cc == 'angle':
                             if minangle: #color code by angle
                                 colors.append(color_code(ang,llimit=minangle))
@@ -268,34 +334,65 @@ class OCFlareList(object):
                                 colors.append(color_code(ang,ulimit=maxangle))
                             else: #color code by angle divided into 3 segments. Should do something about the legend labels too...
                                 colors.append(color_code(ang))
-                    
-                        if 'idx' in locals():
-                            if idx <=4: colors.append('r')
-                            elif idx >=9: colors.append('k')
-                            else: colors.append(classes[idx-5])
                         
-                        if labels==1:
-                            coordlabel.append(ID)
-                        else: #0 or 2
+                        if labels == 2:
                             coordlabel.append(datetime.strftime(ID,'%D %H:%M'))
+                        else: #0 or 2
+                            coordlabel.append(ID)
+                            
                 except UnboundLocalError: continue
-            #if scatter:
-            #    delta = 50
-            #elif cs == '':#notes column is empty
-            #    delta.append(5000*10*2**np.rint(np.log10(np.abs(mval-gval)))) #difference in size between the GOES classes
-            #else: #notes carries chisq value
-            #    delta.append(50*10*2**np.rint(np.log10(float(cs))))
 
+        def line_of_best_fit(datax,datay,loglog= True,minx=False,maxx=False,minratio=False,maxratio=False):
+            #if list convert to np.array
+            fdatax,fdatay=[],[]
+            if type(datax) == list: datax=np.array(datax)
+            if type(datay) == list: datay=np.array(datay)
+            if not minx and not maxx: fdatax=datax
+            #if not miny and not maxy: fdatay=datay
+
+            for x,y in zip(datax,datay):
+                if minx and x > minx and maxx and x < maxx:
+                    fdatax.append(x)
+                    fdatay.append(y)
+                #if maxx and x < maxx:
+                #    fdatax.append(x)
+                #    fdatay.append(y)
+                    #for y in datay:
+            #    if miny and y > miny:
+            #        fdatay.append(y)
+            #    if maxy and y < maxy:
+            #        fdatay.append(y)
+            if type(fdatax) == list: fdatax=np.array(fdatax)
+            if type(fdatay) == list: fdatay=np.array(fdatay)
+            
+            if loglog:
+                fdatax=np.log10(fdatax)
+                fdatay=np.log10(fdatay)
+        
+            #ratio=datay/datax deal with this later
+            print np.shape(fdatax),np.shape(fdatay)
+            line=np.polyfit(fdatax,fdatay,1)
+            print 'line of best fit: 10**('+str(line[0])+'*log10(x) + ' +str(line[1]) +')'
+            x=10**(fdatax) #assume log
+            yfit = lambda x: 10**(line[0]*np.log10(x)+line[1])
+            return x,yfit(x),fdatax,fdatay
+
+        if line:
+            lx,ly,fdatax,fdatay = line_of_best_fit(gcgt0,mcgt0,minx=linexlim[0],maxx=linexlim[1])
+            #print l
+                    
         fig = plt.figure()
         ax1 = fig.add_subplot(111)
         ax1.scatter(gcgt0,mcgt0, s=50, c=colors,alpha=.75) #for some reason the masking is not being effective!
         ax1.plot(np.arange(10),np.arange(10),linestyle='dashed',color='k')
-       
-        #if labels != 0: 
-        #    for x,y,t in zip(np.array(labelang),labelratio,coordlabel):
-        #        #print x,y,t
-        #        ax1.annotate('%s' % t, xy=(x,y), textcoords='data')
-        #    plt.grid()
+        if line:
+            ax1.plot(lx,ly, linestyle='dotted',color='darkorange',linewidth=2)
+
+        if labels != 0: 
+            for x,y,t in zip(gcgt0,mcgt0,coordlabel):
+                #print x,y,t
+                ax1.annotate('%s' % t, xy=(x,y), textcoords='data')
+            plt.grid()
 
    
         plt.xlabel('GOES Flux, W m$^{-2}$')
@@ -346,7 +443,7 @@ class OCFlareList(object):
             plt.savefig(save)
         if show:
             fig.show()
-        #return colors
+        return fdatax,fdatay
 
     def hist_ratio(self,title='All flares',gc='all', save=False,show=True):
         '''Make histogram to see distribution of ratios by goes class'''

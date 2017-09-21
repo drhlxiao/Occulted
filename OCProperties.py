@@ -14,8 +14,10 @@ class OCProperties(object):
             T2: 
             EM2: 
             chisq: chisq value from ospex fit
-            GOES_GOES: GOES flux 
+            GOES_GOES: GOES flux , short channel
+            GOES_GOES_long: GOES flux , long channel
             Messenger_GOES: Same for Messenger
+            Messenger_GOES_long: Same for Messenger
             source_vis:
             source_pos:
             source_pos_disk: source position projected down onto disk if necessary
@@ -26,7 +28,7 @@ class OCProperties(object):
             Rheight: Calculated rhessi height above limb
             occ_percent: occultation percentage
             ratio: GOES ratio
-            e1: empty field for addition later (in case I can't figure out how to make this dynamic)
+            : empty field for addition later (in case I can't figure out how to make this dynamic)
             e2
             e3
             e4
@@ -40,9 +42,14 @@ class OCProperties(object):
         Methods are:
             all the calculation methods...'''
     
-    def __init__(self, ID, legacy=True, filename=False,calc_missing=True):
+    def __init__(self, ID, legacy=True, filename=False,calc_missing=True,att_dict=False):
         '''Return an empty Data_Study object, unless a filename to a correctly formatted csv is given. Do I need to be able to go from a dictionary to an object too?'''
-        tags=['T2','EM2','chisq','source_pos_STEREO','f1pos','f2pos','loop','Rheight','occ_percent','source_pos_disk','e2','e3','e4','e5','e6','e7','e8','e9','e10']
+        if att_dict: #distribute these
+            legacy=False
+            for k in att_dict.keys():
+                setattr(self,k,att_dict[k]) #types?
+                
+        tags=['T2','EM2','chisq','source_pos_STEREO','f1pos','f2pos','loop','Rheight','occ_percent','source_pos_disk','GOES_GOES_long','Messenger_GOES_long','e4','e5','e6','e7','e8','e9','e10']
         if legacy: #get info from legacy OCData object and the associated csv/sav files
             if not filename:
                 filename= '/Users/wheatley/Documents/Solar/occulted_flares/flare_lists/list_final.csv'#default file to read
@@ -62,25 +69,25 @@ class OCProperties(object):
             for att,key in zip(tags,tags):
                 setattr(self,att,'')
  
-        if not legacy:
-            #read attributes from csv file (can just restore the pickle file otherwise. Build this into OCFlare class):
-            import pandas as pd
-            if filename: #it's the big one
-                data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
-                #i=self.get_index(ID,data) #get the index of the flare if it's in a list
-                for key in data.keys(): #only do this if it starts with Observation
-                    if key.startswith('Properties.'):
-                        dat=data[key]
-                        key=key[key.find('.')+1:] #trim it
-                        setattr(self,key,dat.values[0])
-                #self.string_to_dict() #ast doesn't like my data for some reason... the coordinate pairs?
-            if not filename:
-                filename= '/Users/wheatley/Documents/Solar/occulted_flares/flare_lists/'+str(ID)+'OCProperties.csv'#default file to read - need an except in case it doesn't exist
-                data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
-                i=self.get_index(ID,data) #get the index of the flare if it's in a list
-                for key in data.keys():
-                    setattr(self,key,data.values[0])
-                #self.string_to_dict()
+        #if not legacy:
+        #    #read attributes from csv file (can just restore the pickle file otherwise. Build this into OCFlare class):
+        #    import pandas as pd
+        #    if filename: #it's the big one
+        #        data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
+        #        #i=self.get_index(ID,data) #get the index of the flare if it's in a list
+        #        for key in data.keys(): #only do this if it starts with Observation
+        #            if key.startswith('Properties.'):
+        #                dat=data[key]
+        #                key=key[key.find('.')+1:] #trim it
+        #                setattr(self,key,dat.values[0])
+        #        #self.string_to_dict() #ast doesn't like my data for some reason... the coordinate pairs?
+        #    if not filename:
+        #        filename= '/Users/wheatley/Documents/Solar/occulted_flares/flare_lists/'+str(ID)+'OCProperties.csv'#default file to read - need an except in case it doesn't exist
+        #        data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
+        #        i=self.get_index(ID,data) #get the index of the flare if it's in a list
+        #        for key in data.keys():
+        #            setattr(self,key,data.values[0])
+        #        #self.string_to_dict()
 
         if calc_missing: #caluclate missing values if possible
             self.get_T_EM(ID)
@@ -88,7 +95,7 @@ class OCProperties(object):
             self.readloops(ID)
             #etc
             
-        self.Notes=''
+        #self.Notes=''
 
     def get_index(self,ID,data):
         '''Get index of flare in flare list file'''
@@ -154,7 +161,12 @@ class OCProperties(object):
             filename= '/Users/wheatley/Documents/Solar/occulted_flares/data/stereo_pfloops/loops.csv'#default file to read
         import pandas as pd
         data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
-        i = np.where(data['ID'].values == ID)[0][0]#the index of the right flare
+        try:
+            i = np.where(data['ID'].values == ID)[0][0]#the index of the right flare
+        except IndexError: #no loop data!
+            self.loop={'footpoints1':'','length1':'','ellipse1':'','eccentricity1':'','Footpoints2':'','length2':'','ellipse2':'','eccentricity2':'','center':'','notes':''}
+            return
+            
         #do some formatting of the data before placing it into the dictionary...
         def format_fp(fstr):
             if fstr=='' or type(fstr) != str:
