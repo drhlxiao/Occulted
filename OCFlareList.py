@@ -170,10 +170,63 @@ class OCFlareList(object):
         os.chdir(self.list[0].Files.dir)
         #return onenorm
 
+    def update_att(self, IDlist, attlist, att,akey=False):
+        '''re-write a specific attribute for specific flare in list'''
+        i=0
+        for f in self.list:
+            if f.ID in IDlist:
+                if att in f.Datetimes.__dict__.keys():
+                    if not akey:
+                        setattr(f.Datetimes,att,attlist[i])
+                    else:
+                        setattr(f.Datetimes,att[akey],attlist[i])
+                elif att in f.Properties.__dict__.keys():
+                    if not akey:
+                        setattr(f.Properties,att,attlist[i])
+                    else:
+                        setattr(f.Properties,att[akey],attlist[i])
+                elif att in f.Files.__dict__.keys():
+                    if not akey:
+                        setattr(f.Files,att,attlist[i])
+                    else:
+                        setattr(f.Files,att[akey],attlist[i])
+                elif att in f.Observation.__dict__.keys():
+                    if not akey:
+                        setattr(f.Observation,att,attlist[i])
+                    else:
+                        setattr(f.Observation,att[akey],attlist[i])
+                i = i+1
+                   
+                f.export2pickle() 
+
     def update(self):
         '''re-write attribute pickles for each flare in list'''
         for f in self.list:
-            f.export2pickle()         
+            f.export2pickle()
+
+####################################################  DATA HANDLING  ##################################################################
+
+    def select_float(self,att,threshold,key=False,inequality='lt',write=False,retIDlist=True):
+        '''Select based on < or > criterion of float data'''
+        attdata=self.isolate_att(att,key=key)
+        IDs=self.isolate_att('ID')
+        IDlist=[]
+        if inequality == 'lt':
+            for a,ID in zip(attdata,IDs):
+                if a < threshold:
+                    IDlist.append(ID)
+        elif inequality == 'gt':
+            for a in attdata:
+                if a > threshold:
+                    IDlist.append(ID)
+        #create new instance of self with given IDlist? or pop out 'bad' values?
+        #new_flare_list=
+        #if write:
+        #    new_flare_list.write()
+        if retIDlist:
+            return IDlist#,new_flare_list
+        print 'Generate the new flare list using: newlist=OCFlareList(IDlist)' #maybe the safest option to make sure nothing is deleted or overwritten
+        return IDlist#new_flare_list
 
 ####################################################  PLOT METHODS  ##################################################################
 

@@ -637,6 +637,68 @@ class OCFlare(object):
 
     #############################################  MISC CALCULATION METHODS  #######################################################
 
+    def angle_closest_stereo(self):
+        '''Find the angle between Messenger and the closest STEREO spacecraft...might need to re-calc messenger position since the Angle parameter is a bit vague'''
+        import stereo_angle as sa
+        #if ...
+        heexa,heeya,anglea=sa.get_stereo_angle(self.Datetimes.Messenger_peak, stereo='A')
+        heexb,heeyb,angleb=sa.get_stereo_angle(self.Datetimes.Messenger_peak, stereo='B')
+        mheex,mheey=self.get_messenger_coords()
+        dma=np.sqrt((heexa-mheex)**2 + (heeya-mheey)**2)
+        dmb=np.sqrt((heexb-mheex)**2 + (heeyb-mheey)**2)
+        if dma < dmb:
+            closest_stereo='A'
+            angles=anglea
+        else:
+            closest_stereo='B'
+            angles=angleb
+        angle=angles-self.Observation.Angle
+        self.Observation.closest_stereo=closest_stereo #or does it have to be sett_attr?
+        self.Observation.msangle=angle
+        return closest_stereo, angle
+
+    def dump_messenger_coords(self):
+        '''Get messenger coordinates in heliocentric longditude and latitude. For use in angle_closest_stereo'''
+        import pidly
+        idl = pidly.IDL('/Users/wheatley/Documents/Solar/sswidl_py.sh')
+        datestr=dt.strftime(self.Datetimes.Messenger_peak.date(),'%d-%b-%Y')
+        if self.Properties.source_pos != '' and self.Properties.source_pos != '[0,0]':
+            pos=[float(self.Properties.source_pos[1:self.Properties.source_pos.find(':')]),float(self.Properties.source_pos[self.Properties.source_pos.find(':')+1:-1])] #format?
+        else:
+            pos=[0,0]
+        idl.pos=pos
+        idl.datestr=datestr
+        angle = idl('messenger_flare_angle(pos, datestr,mess_helio_longlat)')
+        idl('dd=anytim(mess_helio_longlat.date,/vms)')
+        datet=idl.dd
+        idl('ll=mess_helio_longlat.xyz')
+        longlat=idl.ll
+        idl('rad=mess_helio_longlat.d_km')
+        radius=idl.rad
+        idl.close()
+        coords={'datet':datet,'radius':radius,'longlat':longlat}
+        pickle.dump(coords,open('messenger_helio_longlat.p','wb'))
+        #return datet,longlat
+
+    def get_messenger_coords(self):
+        '''Get messenger coordinates in heliocentric longditude and latitude. For use in angle_closest_stereo'''
+        cdict=pickle.load(open('messenger_helio_longlat.p','rb'))
+        dates=cdict['datet']
+        radius=cdict['radius']
+        coords=cdict['longlat']
+        fdate=self.Datetimes.Messenger_peak.date()
+        #search the dates for the correct index
+        for i,d in enumerate(dates):
+            idldate=dt.strptime(d,'%d-%b-%Y %H:%M:%S.000').date()
+            delt=fdate-idldate
+            if delt.days==0: #use timedeltas
+                idx=i
+                break
+        #search the coords for the corresponding x and y
+        mheex=coords[idx][0]*radius[idx] #convert to km
+        mheey=coords[idx][1]*radius[idx] 
+        return mheex,mheey
+        
     def extract_stereo_times(self):
         '''Put correct dates and times from downloaded stereo files into the datetimes.stereo_files list (except these are not actually the correct times, just the filenames. Can fix this later though, since right now the filename is more important)'''
         path=self.Files.dir + self.Files.folders['stereo-aia']
