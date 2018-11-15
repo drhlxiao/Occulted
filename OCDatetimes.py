@@ -31,7 +31,7 @@ class OCDatetimes(object):
             format_datetimes() to format for reading from/exporting to csv/sav
             extend_time_int() does the time interval extensions
             '''
-    def __init__(self, ID,legacy=True,filename=False, calc_times=False, att_dict=False):
+    def __init__(self, ID,legacy=True,filename=False, calc_times=False, att_dict=False,convert=True):
         '''Initialize the object, given the flare ID. This requires use of the OCFiles object I think...'''
         if att_dict: #distribute these
             legacy=False
@@ -102,8 +102,8 @@ class OCDatetimes(object):
         #        data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
         #        for key in data.keys(): #only do this if it starts with Observation
         #            setattr(self,key,data.values[0])
-                 
-        self.convert2datetime()
+        if convert:        
+            self.convert2datetime()
         #update the OCFiles object with the file used to generate this instance of the object
         if calc_times:
             #self.convert2datetime() #in case it doesn't work the first time?
