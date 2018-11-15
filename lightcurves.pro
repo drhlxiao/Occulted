@@ -32,6 +32,7 @@ function one_curve_M,flare_times,xrs_file,energy_bin,quiet=quiet
     time_interval=[anytim(flare_times[0]),anytim(flare_times[1])]
     obj=ospex(/no_gui)
     obj-> set, spex_specfile= 'data/dat_files/' + strtrim(xrs_file,1)+'.dat'
+    obj->set_time,time_interval
     data=obj->getdata(class='spex_data')
     eaxis=obj->getaxis(/ct_energy)
     taxis=obj->getaxis(/mean) ;are these formatted from a different date?
@@ -42,30 +43,54 @@ function one_curve_M,flare_times,xrs_file,energy_bin,quiet=quiet
                                 ;newtaxis = [taxis[tlist[0]-1],taxis[tlist]]
     if keyword_set(quiet) eq 0 then utplot,taxis, phigh,timerange=[time_interval[0],time_interval[1]],yrange=[min(phigh),max(phigh)]
     obj_destroy,obj
-    data={taxis:taxis,phigh:phigh}
+    Mtim=taxis
+    nMtim = anytim(Mtim,/vms)
+
+    data={taxis:nMtim,phigh:phigh}
     return,data
  end
 
-function one_curve_G,flare_times,energy_bin,quiet=quiet
-    ;GOES lightcurves
+function one_spec_M,flare_times,xrs_file,energy_bin,quiet=quiet
+    ;let's use GOES energy ranges
     erange=[energy_bin[0],energy_bin[1]]
-    time_interval=[anytim(flare_times[0]),anytim(flare_times[i])]
+    time_interval=[anytim(flare_times[0]),anytim(flare_times[1])]
+    tdelta=anytim(flare_times[1])-anytim(flare_times[0])
     obj=ospex(/no_gui)
     obj-> set, spex_specfile= 'data/dat_files/' + strtrim(xrs_file,1)+'.dat'
+    obj->set_time,time_interval
     data=obj->getdata(class='spex_data')
     eaxis=obj->getaxis(/ct_energy)
-    taxis=obj->getaxis(/mean) ;are these formatted from a different date?
-    elist=where( (eaxis ge min(erange)) AND (eaxis le max(erange)) )
-    phigh = total(data.data(elist,*),1)
+    ;taxis=obj->getaxis(/mean) ;are these formatted from a different date?
+    ;elist=where( (eaxis ge min(erange)) AND (eaxis le max(erange)) )
+    ctot = total(data.data,2)/tdelta
     ;tlist=where( (taxis ge time_interval[0]) AND (taxis le time_interval[1]))
     ;mti=size(tlist,/dim)
                                 ;newtaxis = [taxis[tlist[0]-1],taxis[tlist]]
-    if keyword_set(quiet) eq 0 then begin
-        utplot,taxis, phigh,timerange=[time_interval[0],time_interval[1]],yrange=[min(phigh),max(phigh)]
-        print, anytim(time_interval,/vms),max(phigh),'     ',flare_list.datetimes.obs_start_time[i],'     ',flare_list.datetimes.obs_end_time[i]
-    endif
+    if keyword_set(quiet) eq 0 then utplot,taxis, phigh,timerange=[time_interval[0],time_interval[1]],yrange=[min(phigh),max(phigh)]
     obj_destroy,obj
-    data={taxis:taxis,phigh:phigh}
+    ;Mtim=taxis
+    ;nMtim = anytim(Mtim,/vms)
+
+    data={eaxis:eaxis,ctot:ctot}
+    return,data
+ end
+
+function one_curve_G,flare_times,quiet=quiet
+    ;GOES lightcurves
+    ft=[anytim(flare_times[0],/vms),anytim(flare_times[1],/vms)]
+    if anytim(ft[0]) lt anytim('27-Jun-2009 22:51:00.000') then sat='13' else if anytim(ft[0]) lt anytim('04-Mar-2010 23:57:00.000') then sat='14' else sat='15'
+    a=ogoes()
+    a->set, tstart=ft[0],tend=ft[1],sat=sat
+    d=a->getdata(/struct)
+    if keyword_set(quiet) eq 0 then utplot,d.tarray, d.ydata[0,*],timerange=[time_interval[0],time_interval[1]],yrange=[min(phigh),max(phigh)]
+                                ;print, 'before',d.tarray[0:5]
+    if isa(d,'struct') then begin
+        bb = string(anytim(d.tarray+anytim(d.UTbase),/vms)) ;fix this to vms?
+        data={UTbase:d.UTbase,tarray:bb,ydata:d.ydata,yclean:d.yclean}
+     endif else data=-1
+    ;print, 'after', data.tarray[0:5]
+    obj_destroy,a
+
     return,data
  end
 
@@ -99,10 +124,11 @@ function get_data,flare_list, Rbins=Rbins, Mbins=Mbins,export=filename, goes=goe
     if keyword_set(Mbins) eq 0 then Mbins = [[1.55,12.4],[3.099,24.8]]    
     nbins=size(Rbins,/dimensions)
     drate = one_curve_R(ft,[Rbins[0,0],Rbins[1,0]],sp_time_int=sp_time_int,mask=mask_formatted,quiet=quiet)
-    newdrate={UT:drate.UT,rate:drate.rate,erate:drate.erate,ltime:drate.ltime,erange:strtrim(string(Rbins[0,0]),1)+'-'+strtrim(string(Rbins[1,0]),1)} ;let's convert UT back to string so I can also use in python if I want ;fix this! make one dictionary entry for each energy range
+                                ;newdrate={UT:drate.UT,rate:drate.rate,erate:drate.erate,ltime:drate.ltime,erange:strtrim(string(Rbins[0,0]),1)+'-'+strtrim(string(Rbins[1,0]),1)} ;let's convert UT back to string so I can also use in python if I want ;fix this! make one dictionary entry for each energy range
+    newdrate={UT:dblarr(2,600),rate:fltarr(600),erate:fltarr(600),ltime:fltarr(600),erange:strtrim(string(Rbins[0,0]),1)+'-'+strtrim(string(Rbins[1,0]),1)}
     Rdata=replicate(newdrate,(nbins[1])*llen[0])
-    k=0
-    for i=0,llen[0]-1 do begin
+    k=1
+    for i=1,llen[0]-1 do begin
         start_time=anytim(flare_list.datetimes.obs_start_time[i]);anytim(flare_list.datetimes.messenger_datetimes[i])-600.
         end_time=anytim(flare_list.datetimes.obs_end_time[i]);anytim(flare_list.datetimes.messenger_datetimes[i])+1200.
         mask=flare_list.data_properties.good_det[i]
@@ -116,58 +142,58 @@ function get_data,flare_list, Rbins=Rbins, Mbins=Mbins,export=filename, goes=goe
         ;k=k+1
     endfor
 
-    nbins=size(Mbins,/dimensions)    
-    ft = [flare_list.datetimes.messenger_datetimes[0],anytim(end_time,/vms)]
-    Mdat = one_curve_M(ft,flare_list.data_properties.xrs_files[0],[Mbins[0,0],Mbins[1,0]],quiet=quiet)
-    Mdat = {Taxis:dblarr(1000),phigh:fltarr(1000),len:1000L}
-    Mdata=replicate(Mdat,(nbins[1]+1)*llen[0]) ;careful... what if these are different sizes?
-    k=0
-    for j=0,nbins[1]-1 do begin
-       for i=0,llen[0]-1 do begin
-          ;start_time=anytim(flare_list.datetimes.messenger_datetimes[i])-600.
-          ;end_time=anytim(flare_list.datetimes.messenger_datetimes[i])+1200.
-          start_time=anytim(flare_list.datetimes.obs_start_time[i]);anytim(flare_list.datetimes.messenger_datetimes[i])-600.
-          end_time=anytim(flare_list.datetimes.obs_end_time[i]);anytim(flare_list.datetimes.messenger_datetimes[i])+1200.
-          ft = [anytim(start_time,/vms),anytim(end_time,/vms)]
-          print,ft,k
-          data = one_curve_M(ft,flare_list.data_properties.xrs_files[i],[Mbins[0,j],Mbins[1,j]],quiet=quiet)  
-          Mdata[k].taxis = data.taxis
-          Mdata[k].phigh = data.phigh
-          dlen= size(data.phigh,/dimensions)
-          Mdata[k].len = dlen[0]
-          k=k+1
-       endfor
-       k=k+1
-    endfor
-    data={Rdata:Rdata,Mdata:Mdata}
+    ;; nbins=size(Mbins,/dimensions)    
+    ;; ft = [flare_list.datetimes.messenger_datetimes[0],anytim(end_time,/vms)]
+    ;; Mdat = one_curve_M(ft,flare_list.data_properties.xrs_files[0],[Mbins[0,0],Mbins[1,0]],quiet=quiet)
+    ;; Mdat = {Taxis:dblarr(1000),phigh:fltarr(1000),len:1000L}
+    ;; Mdata=replicate(Mdat,(nbins[1]+1)*llen[0]) ;careful... what if these are different sizes?
+    ;; k=0
+    ;; for j=0,nbins[1]-1 do begin
+    ;;    for i=0,llen[0]-1 do begin
+    ;;       ;start_time=anytim(flare_list.datetimes.messenger_datetimes[i])-600.
+    ;;       ;end_time=anytim(flare_list.datetimes.messenger_datetimes[i])+1200.
+    ;;       start_time=anytim(flare_list.datetimes.obs_start_time[i]);anytim(flare_list.datetimes.messenger_datetimes[i])-600.
+    ;;       end_time=anytim(flare_list.datetimes.obs_end_time[i]);anytim(flare_list.datetimes.messenger_datetimes[i])+1200.
+    ;;       ft = [anytim(start_time,/vms),anytim(end_time,/vms)]
+    ;;       print,ft,k
+    ;;       data = one_curve_M(ft,flare_list.data_properties.xrs_files[i],[Mbins[0,j],Mbins[1,j]],quiet=quiet)  
+    ;;       Mdata[k].taxis = data.taxis
+    ;;       Mdata[k].phigh = data.phigh
+    ;;       dlen= size(data.phigh,/dimensions)
+    ;;       Mdata[k].len = dlen[0]
+    ;;       k=k+1
+    ;;    endfor
+    ;;    k=k+1
+    ;; endfor
+    ;; ;data={Rdata:Rdata,Mdata:Mdata}
    
-    if keyword_set(goes) eq 1 then begin ;something is wrong with how this is getting proccessed!tarray is weird
-        d={UTbase:'foo',tarray:dblarr(1000),Ydata:fltarr(1000,2),len:1000L}
-        Gdata=replicate(d,llen)
-       for i=0,llen[0]-1 do begin
-          a=ogoes()
-          start_time=anytim(flare_list.datetimes.obs_start_time[i]);anytim(flare_list.datetimes.messenger_datetimes[i])-600.
-          end_time=anytim(flare_list.datetimes.obs_end_time[i]);anytim(flare_list.datetimes.messenger_datetimes[i])+1200.
-          ;start_time=anytim(flare_list.datetimes.messenger_datetimes[i])-600.
-          ;end_time=anytim(flare_list.datetimes.messenger_datetimes[i])+1200.
-          ft = [anytim(start_time,/vms),anytim(end_time,/vms)]
-          if anytim(ft[0]) lt anytim('27-Jun-2009 22:51:00.000') then sat='13' else if anytim(ft[0]) lt anytim('04-Mar-2010 23:57:00.000') then sat='14' else sat='15'
-           a->set, tstart=ft[0],tend=ft[1],sat=sat
-           d=a->getdata(/struct)
-           glen= size(d.tarray,/dimensions)
-           Gdata[i].UTbase = d.UTbase
-           Gdata[i].tarray[0:glen-1]=d.tarray
-           print, size(d.ydata,/dim),glen
-           Gdata[i].ydata[0:glen-1,*]=d.ydata
-           Gdata[i].len = glen[0]
-           obj_destroy,a
-       endfor
-       data={Rdata:Rdata,Mdata:Mdata,Gdata:Gdata}
-       ;data={Gdata:Gdata}
-    endif
-       ;data={Rdata:Rdata}
+    ;; if keyword_set(goes) eq 1 then begin ;something is wrong with how this is getting proccessed!tarray is weird
+    ;;     d={UTbase:'foo',tarray:dblarr(1172),Ydata:fltarr(1172,2),len:1172L}
+    ;;     Gdata=replicate(d,llen)
+    ;;    for i=0,llen[0]-1 do begin
+    ;;       a=ogoes()
+    ;;       start_time=anytim(flare_list.datetimes.obs_start_time[i]);anytim(flare_list.datetimes.messenger_datetimes[i])-600.
+    ;;       end_time=anytim(flare_list.datetimes.obs_end_time[i]);anytim(flare_list.datetimes.messenger_datetimes[i])+1200.
+    ;;       ;start_time=anytim(flare_list.datetimes.messenger_datetimes[i])-600.
+    ;;       ;end_time=anytim(flare_list.datetimes.messenger_datetimes[i])+1200.
+    ;;       ft = [anytim(start_time,/vms),anytim(end_time,/vms)]
+    ;;       if anytim(ft[0]) lt anytim('27-Jun-2009 22:51:00.000') then sat='13' else if anytim(ft[0]) lt anytim('04-Mar-2010 23:57:00.000') then sat='14' else sat='15'
+    ;;        a->set, tstart=ft[0],tend=ft[1],sat=sat
+    ;;        d=a->getdata(/struct)
+    ;;        glen= size(d.tarray,/dimensions)
+    ;;        Gdata[i].UTbase = d.UTbase
+    ;;        Gdata[i].tarray[0:glen-1]=d.tarray
+    ;;        print, size(d.ydata,/dim),glen
+    ;;        Gdata[i].ydata[0:glen-1,*]=d.ydata
+    ;;        Gdata[i].len = glen[0]
+    ;;        obj_destroy,a
+    ;;    endfor
+    ;;    data={Mdata:Mdata,Gdata:Gdata}
+    ;;    ;data={Gdata:Gdata}
+    ;; endif
+       data={Rdata:Rdata}
     ;; if keyword_set(export) eq 1 then write_csv, filename,data ;,header=;tags of structure
-    save, data, filename='data/lc_data.sav'
+    ;save, data, filename='data/lc_data.sav'
     return, data
  end
 
