@@ -50,17 +50,17 @@ def query_vso(time_int, instrument, wave, source=False, path=False,save=True):
             res=Fido.search(time, wl,instr)
 
         print res
-        if len(res) != 1:
-            if not path: files = Fido.fetch(res,path='./{file}').wait()
-            else: files = Fido.fetch(res,path=path+'{file}').wait()
+        #if len(res) != 1:
+        if not path: files = Fido.fetch(res,path='./{file}').wait()
+        else: files = Fido.fetch(res,path=path+'{file}').wait()
 
-            f=sunpy.map.Map(files[0])
-            maps.append({f.instrument: f.submap(SkyCoord((-1100, 1100) * u.arcsec, (-1100, 1100) * u.arcsec,frame=f.coordinate_frame))}) #this field too small for coronographs
+        f=sunpy.map.Map(files[0])
+        maps.append({f.instrument: f.submap(SkyCoord((-1100, 1100) * u.arcsec, (-1100, 1100) * u.arcsec,frame=f.coordinate_frame))}) #this field too small for coronographs
 
-            if save: #pickle it? 
-                os.chdir(path)
-                newfname=files[0][files[0].rfind('/')+1:files[0].rfind('.')]+'.p'
-                pickle.dump(maps,open(newfname,'wb'))
-        else:
-            print 'no results found! is the server up?'
+        if save: #pickle it? 
+            os.chdir(path)
+            newfname=files[0][files[0].rfind('/')+1:files[0].rfind('.')]+'.p'
+            pickle.dump(maps,open(newfname,'wb'))
+        #else:
+        #    print 'no results found! is the server up?'
         return maps

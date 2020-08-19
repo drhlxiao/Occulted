@@ -20,7 +20,7 @@ import sunpy.map
 import astropy.units as u
 from astropy.coordinates import SkyCoord
 
-def get_AIA(time_int, wave, instrument='AIA', path=False,save=True):
+def get_AIA(time_int, wave, instrument='AIA', path=False,save=True, dem=False):
         '''method to query VSO database for data and download it. '''
         #vc = vso.VSOClient()
         maps=0
@@ -57,14 +57,14 @@ def get_AIA(time_int, wave, instrument='AIA', path=False,save=True):
         if not path: files = Fido.fetch(res,path='./{file}')
         else: files = Fido.fetch(res,path=path+'{file}')
 
-        f=sunpy.map.Map(files[0])
-        maps.append({f.instrument: f.submap(SkyCoord((-1100, 1100) * u.arcsec, (-1100, 1100) * u.arcsec,frame=f.coordinate_frame))}) #this field too small for coronographs
+        #f=sunpy.map.Map(files[0])
+        #maps.append({f.instrument: f.submap(SkyCoord((-1100, 1100) * u.arcsec, (-1100, 1100) * u.arcsec,frame=f.coordinate_frame))}) #this field too small for coronographs
 
-        if save: #pickle it? 
-            os.chdir(path)
-            newfname=files[0][files[0].rfind('/')+1:files[0].rfind('.')]+'.p'
-            pickle.dump(maps,open(newfname,'wb'))
+        #if save: #pickle it? 
+        #    os.chdir(path)
+        #    newfname=files[0][files[0].rfind('/')+1:files[0].rfind('.')]+'.p'
+        #    pickle.dump(maps,open(newfname,'wb'))
         #else:
             #print 'no results found! is the server up?'
-        return res,maps
+        #return res,maps
 

@@ -36,6 +36,7 @@ class Data_Study(object):
                 RHESSI data path
                 RHESSI browser URL's
                 csv storage filename
+                array of good detectors
             Notes'''
     def __init__(self, filename=0, length=0):
         '''Return an empty Data_Study object, unless a filename to a correctly formatted csv is given. Do I need to be able to go from a dictionary to an object too?'''
@@ -92,6 +93,7 @@ class Data_Study(object):
                 self.Data_properties["RHESSI_data_path"]=data['data_properties'][0]["rhessi_data_path"][0].tolist()
                 self.Data_properties["RHESSI_browser_urls"]=data['data_properties'][0]["rhessi_browser_urls"][0].tolist()
                 self.Data_properties["csv_name"]=data['data_properties'][0]["csv_name"][0].tolist()
+                #self.Data_properties["good_det"]=data['data_properties'][0]["good_det"][0].tolist()
                 self.Notes= data["notes"][0].tolist()
                 self.format_datetimes()
                 

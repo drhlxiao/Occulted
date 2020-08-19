@@ -34,6 +34,7 @@ def get_maps_and_headers(path,tags=False,number=False):
         files=glob.glob('*'+tags+'*.fts')
     else:
         files=glob.glob('*.fts')
+    files.sort()
     if not number:
         maps=sunpy.map.Map(files)
         headers=[sunpy.io.fits.get_header(f) for f in files]
@@ -48,28 +49,44 @@ def align_maps(m1,m2,a1=1,a2=1): #should m1 and m2 be the masked arrays?
     comp_map.set_alpha(1,a2)
     return comp_map
 
-def difference_map(m1,m2,h1,h2):
+def difference_map(m1,m2,h1,h2,logscale=True,lowmask=False,highmask=False):
     data=m1.data-m2.data
+    if lowmask:
+        if logscale:
+            lowmask=10**lowmask
+        if lowmask < 1:
+            data=np.ma.masked_less(data,lowmask*np.max(data))
+        else: #it's just a pixel value
+            data=np.ma.masked_less(data,lowmask)
+    if highmask:
+        if logscale:
+            highmask=10**highmask
+        if highmask < 1:
+            data=np.ma.masked_greater(data,highmask*np.max(data))
+        else: #it's just a pixel value
+            data=np.ma.masked_greater(data,highmask)
+    if logscale:
+        data=np.log10(data)
     header=h1
     diff_map=sunpy.map.Map((data,header))
     return diff_map
 
-def running_diff(maps,headers):
+def running_diff(maps,headers,logscale=True,lowmask=False,highmask=False):
     '''make base difference map. basically a wrapper for difference_map when applied to a bunch of maps'''
     outmaps=[]
     for j,m,h in zip(enumerate(maps),headers):
         while j < len(m[:-1]):
-            diff_map=difference_map(maps[j+1],m,headers[j+1],h)
+            diff_map=difference_map(maps[j+1],m,headers[j+1],h,logscale=logscale,lowmask=lowmask,highmask=highmask)
             outmaps.append(diff_map)
     return outmaps
     
-def base_diff(maps,headers):
+def base_diff(maps,headers,logscale=True,lowmask=False,highmask=False):
     '''make base difference map. basically a wrapper for difference_map when applied to a bunch of maps'''
     bm=maps[0]
-    bh=headers[0]
+    bh=headers[0]#[0] #need to remove this for not-COR (also for h below)
     outmaps=[]
     for m,h in zip(maps,headers):
-        diff_map=difference_map(m,bm,h,bh)
+        diff_map=difference_map(m,bm,h,bh,logscale=logscale,lowmask=lowmask,highmask=highmask)
         outmaps.append(diff_map)
     return outmaps
 
@@ -167,15 +184,27 @@ def plot_with_mask(maplist,mask,palette,save=True,show=False):
     if save:
         return fig
     
-def sunpy2png(maplist,outname,mask=False,outpath=False,ext='png'):
+def sunpy2png(maplist,outname,mask=False,outpath=False,ext='png',colorbar=True,lownorm=False,highnorm=False,big=True):
     '''input to mask kward is [[list of masks], palette]'''
-    plt.clf()
+    if big:
+        plt.figure(figsize=(16,12))
+    plt.clf()        
+    if lownorm or highnorm:
+        if not lownorm:
+            norm=plt.Normalize(0,highnorm)
+        else:
+            norm=plt.Normalize(lownorm,highnorm)
     if mask:
         fig=plot_with_mask(maplist,mask[0],mask[1])
     else:
-        fig=maplist[0].plot()
+        try:
+            fig=maplist[0].plot(cmap=cm.rainbow,norm=norm)
+        except UnboundLocalError:
+            fig=maplist[0].plot(cmap=cm.rainbow)
     if not outpath:
         outpath='.'
+    if colorbar:
+        plt.colorbar()            
     plt.savefig(outpath+'/'+outname+ext)
     
 def run_ffmpeg(imwild,mname,mdir='.',framerate=24):
@@ -185,25 +214,34 @@ def run_ffmpeg(imwild,mname,mdir='.',framerate=24):
     #ff.cmd()
     ff.run()
 
-def make_difference_movie(ddir,mtype,moviename,mdir=False,tags=False,n=False,imtags=False,imdir=False,ext='png',submap=False):
-    #get the maps
+def make_difference_movie(ddir,mtype,moviename,mdir=False,tags=False,n=False,imtags=False,imdir=False,ext='png',submap=False,logscale=True,lownorm=False,highnorm=False,colorbar=True,big=True):
+    #get the maps. submap is in form [(xrange_tuple),(yrange_tuple)]. low and highmask are in percentage of max pixel or absolute pixel cutoffs (>1)
     cwd=os.getcwd()
     maps1,h1=get_maps_and_headers(ddir,tags=tags,number=n)
     if submap:
-        print 'foo' #do something
+        submaps,h1=[],[]
+        for m in maps1:
+            bl=submap[0]*u.arcsec#(submap[0][0]*u.arcsec,submap[0][1]*u.arcsec)
+            tr=submap[1]*u.arcsec#(submap[1][0]*u.arcsec,submap[1][1]*u.arcsec)
+            sm=m.submap(SkyCoord((bl),(tr),frame=m.coordinate_frame))
+            submaps.append(sm)
+            h1.append(sm.meta)
+        maps1=None
+        maps1=submaps
     if mtype=='base':
-        outmaps=base_diff(maps1,h1)
+        outmaps=base_diff(maps1,h1,logscale=logscale,lowmask=lownorm,highmask=highnorm)
     elif mtype == 'running':
-        outmaps=running_diff(maps1,h1)
+        outmaps=running_diff(maps1,h1,logscale=logscale,lowmask=lownorm,highmask=highnorm)
     if not imdir:
         imdir='.'
     #convert aligned maps to png for use in ffmpeg
     for i,om in enumerate(outmaps):
         if imtags:
-            outname='map'+imtags+'_'+str(i)+'.'
+            outname='map'+imtags+'_'+'{0:03d}'.format(i)+'.'
         else:
-            outname='map'+str(i)+'.'
-        sunpy2png([om],outname,outpath=imdir,ext=ext)
+            outname='map'+'{0:03d}'.format(i)+'.'
+        #sunpy2png([om],outname,**kwargs)            
+        sunpy2png([om],outname,outpath=imdir,ext=ext,colorbar=colorbar,lownorm=lownorm,highnorm=highnorm,big=big)
     os.chdir(imdir)
     #if imtags:
     #    imlist=glob.glob('*'+imtags+'*.'+ext)

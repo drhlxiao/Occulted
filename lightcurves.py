@@ -60,7 +60,7 @@ def loop_GM(g,m):
 def plot_GM(Mdata,Gdata,n): #will probably have to deal with times to make them all the same...
     import matplotlib.dates as mdates
     tim=Mdata['taxis'][0][n]
-    mlen=Mdata['len'][0]#[n]
+    mlen=Mdata['len'][0][n]
     nflares=np.shape(Mdata['taxis'][0])[0]/2 #assume 2 energy ranges for now
     Mtim=[]
     for t in tim: Mtim.append(dt.strptime(t,'%d-%b-%Y %H:%M:%S.%f')) #fix messenger times to datetimes
@@ -68,12 +68,12 @@ def plot_GM(Mdata,Gdata,n): #will probably have to deal with times to make them 
     print type(Mtim),np.shape(Mtim[:-1]),np.shape(cps1)
     #print np.shape(cps1),np.shape(Mtim[0:mlen-1])
     
-    gtim=Gdata['taxis'][0]#[n]
-    glen=Gdata['len'][0]#[n]
+    gtim=Gdata['taxis'][0][n]
+    glen=Gdata['len'][0][n]
     Gtim=[]
     for t in gtim: Gtim.append(dt.strptime(t,'%d-%b-%Y %H:%M:%S.%f')) #fix GOES times to datetimes
-    glong=Gdata['ydata'][0][1,0:glen-1]#[n,1,0:glen-1] #what's up with these data?
-    gshort=Gdata['ydata'][0][0,0:glen-1]#[n,0,0:glen-1]    
+    glong=Gdata['ydata'][0][n,1,0:glen-1] #what's up with these data?[1,0:glen-1][n,1,0:glen-1]
+    gshort=Gdata['ydata'][0][n,0,0:glen-1]    
 
     #plt.plot(Mtim[0:mlen-1],Mdata['phigh'][0][n][0:mlen-1],'b') #first energy channel
     #plt.plot(Mtim[0:mlen-1],Mdata['phigh'][0][n+nflares-1][0:mlen-1],'g') #second energy channel I think...check that this is plotting the right thing
@@ -81,14 +81,14 @@ def plot_GM(Mdata,Gdata,n): #will probably have to deal with times to make them 
     ax2=ax1.twinx()
     #l1,=ax1.step(Mtim[0:mlen-1],Mdata['phigh'][0][n][0:mlen-1],'b',label='1.5-12.4 keV') #first energy channel
     #l2,=ax1.step(Mtim[0:mlen-1],Mdata['phigh'][0][n+nflares-1][0:mlen-1],'g',label= '3-24.8 keV') #second energy channel I think...
-    #l1,=ax1.step(Mtim[0:mlen-1],cps1,'b',label='1.5-12.4 keV')
-    #l2,=ax1.step(Mtim[0:mlen-1],cps2,'g',label= '3-24.8 keV')
+    l1,=ax1.step(Mtim[0:mlen-1],cps1,'b',label='1.5-12.4 keV')
+    l2,=ax1.step(Mtim[0:mlen-1],cps2,'g',label= '3-24.8 keV')
     #l1,=ax1.step(Mtim[:-1],cps1,'b',label='1.5-12.4 keV')
-    l2,=ax1.step(Mtim[:-1],cps2,'g',label= '3-24.8 keV')
+    #l2,=ax1.step(Mtim[:-1],cps2,'g',label= '3-24.8 keV')
     
     #plt.axis #add y-axis for GOES flux
-    #l3,=ax2.plot(Gtim[0:glen-1],gshort,'k',label='GOES 1-8 $\AA$') #goes short - plot with
-    #l4,=ax2.plot(Gtim[0:glen-1],glong,'m',label='GOES .5-4 $\AA$') #goes long
+    l3,=ax2.plot(Gtim[0:glen-1],gshort,'k',label='GOES 1-8 $\AA$') #goes short - plot with
+    l4,=ax2.plot(Gtim[0:glen-1],glong,'m',label='GOES .5-4 $\AA$') #goes long
     myFmt = mdates.DateFormatter('%H:%M')
     ax1.xaxis.set_major_formatter(myFmt)
     plt.gcf().autofmt_xdate()
@@ -100,20 +100,20 @@ def plot_GM(Mdata,Gdata,n): #will probably have to deal with times to make them 
     ax2.set_yscale('log')
     
     plt.title(dt.strftime(Mtim[0].date(),'%Y-%b-%d'))
-    ax1.set_xlim([Gtim[0],Gtim[glen-1]])
+    ax1.set_xlim([Gtim[0],dt.strptime('2012-07-19 05:55:01','%Y-%m-%d %H:%M:%S')])
     #print np.max(glong),np.max(gshort)
     #plt.legend((l1,l2,l3,l4),(l1.get_label(),l2.get_label(),l3.get_label(),l4.get_label()),loc='upper left',prop={'size':12})
     fig.show()
     fname='data/lightcurves/'+dt.strftime(Mtim[0].date(),'%Y-%b-%d')+'MG.png'
     fig.savefig(fname)
-    return glong,gshort
+    return Mtim[0:mlen-1],cps1
 
 def plotR(Rdata,n):
     import matplotlib.dates as mdates
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
     n=n*4
-    tim=Rdata['UT'][0][n][:,0]#since there are 4 channels per flare
+    tim=Rdata['UT'][0][1,:,1]#[n][:,0]#since there are 4 channels per flare
     #rlen=Rdata['len'][0][n]
 
     Rtim=[]
@@ -125,6 +125,7 @@ def plotR(Rdata,n):
     if np.mean(Rdata['rate'][0][n]) != 0.0:
         ax1.plot(Rtim,Rdata['rate'][0][n],'m',label='4-9 keV') #first energy channel
     if np.mean(Rdata['rate'][0][n+1]) != 0.0:
+        print np.shape(Rdata['rate'][0][n+1])
         ax1.plot(Rtim,Rdata['rate'][0][n+1],'g',label='12-18 keV') #second energy channel I think...
     if np.mean(Rdata['rate'][0][n+2]) != 0.0:
         ax1.plot(Rtim,Rdata['rate'][0][n+2],'c',label='18-30 keV') #etc
@@ -138,7 +139,7 @@ def plotR(Rdata,n):
     ax1.xaxis.set_major_formatter(myFmt)
     plt.gcf().autofmt_xdate()
     plt.title(dt.strftime(Rtim[0].date(),'%Y-%b-%d'))
-    #plt.show()
+    plt.show()
     fname='data/lightcurves/'+dt.strftime(Rtim[0].date(),'%Y-%b-%d')+'R.png'
     fig.savefig(fname)
     

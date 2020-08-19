@@ -1,6 +1,6 @@
  #######################################
 # messenger_angles.py
-# Erica Lastufka 30/11/2016  
+# Erica Lastufka 30/11/2016
 
 #Description: Check if Messenger can see an occulted flare
 #######################################
@@ -24,8 +24,23 @@ from datetime import timedelta as td
 import os
 import pickle
 
+def match_flare_list(l1,l2):
+    #l1 is OCflare object, l2 is not, it's a dictonary
+    l2dt=l2['datetimes']
+    for l in l1.list:
+        bt=l.Datetimes.Messenger_peak
+        mdt=min(l2dt, key=lambda x: abs(x - bt))
+        mindex=l2dt.index(mdt)
+        l.Properties.dennisT1=l2['T1'][mindex]
+        l.Properties.dennisT2=l2['T2'][mindex]
+        l.Properties.dennisEM1=l2['EM1'][mindex]
+        l.Properties.dennisEM2=l2['EM2'][mindex]
+        l.Properties.Fe_abund=l2['Fe'][mindex]
+
 def read_flare_list(filename='test.csv'):
     '''reads in list of occulted flare positions and time intervals'''
+    #edit 2020 read the rest of everything as well
+    #Number	Date	Start time	End time	Duration	EM1	T1	EM2	T2	Fe	Ca	S	Si	Ar	Mg	drmmod	drmmod	drmmod	chimax			chimax
     #fit_resK = pd.read_csv('Occulted_Results_23.csv', sep=',', index_col=0) - Frederic's data
     #fit_resO = pd.read_csv('Occulted_Results_24.csv', sep=',', index_col=0)
     #fit_res = pd.concat([fit_resK,fit_resO])
@@ -40,7 +55,7 @@ def read_flare_list(filename='test.csv'):
     strdates=newdates
     for (date,time,i) in zip(data['Date'],data['Start_Time'],range(0,len(datelen)-1)):
         try:
-            newdates.append(str(datetime.strptime(date, '%Y %b %d').strftime('%m/%d/%y')))
+            newdates.append(str(datetime.strptime(date, '%Y %b %d').strftime('%d-%b-%Y')))
         except ValueError:
             newdates=datelen.tolist()
             break
@@ -59,13 +74,13 @@ def read_flare_list(filename='test.csv'):
                 new_e = e[:-2]
             starttimes.append(new_s)
             endtimes.append(new_e)
-            datetimes.append(datetime.combine(datetime.strptime(newdates[i],'%m/%d/%y'),datetime.strptime(new_s.strip(),'%H:%M:%S').time()))
+            datetimes.append(datetime.combine(datetime.strptime(newdates[i],'%d-%b-%Y'),datetime.strptime(new_s.strip(),'%H:%M:%S').time()))
     else:
         starttimes=data['Start_Time'].tolist()
         endtimes=data['End_Time'].tolist()
         for (date,time) in zip(data['Date'],data['Start_Time']):
-            ndate = datetime.strptime(date,'%m/%d/%y')
-            ntime = datetime.strptime(time,'%H:%M:%S.00')
+            ndate = datetime.strptime(date,'%d-%b-%Y')
+            ntime = datetime.strptime(time,'%H:%M:%S')
             datetimes.append(datetime.combine(ndate.date(),ntime.time()))
 
     flare_list = {'date':newdates,'stime':starttimes,'etime':endtimes,'datetimes':datetimes}
@@ -73,7 +88,7 @@ def read_flare_list(filename='test.csv'):
         flare_list['Angle']=data['Angle'].tolist()
     if 'ID' in data.keys():
         flare_list['ID']=data['ID'].tolist()
-        
+
     return flare_list
 
 def is_flare_observed(list1,list2, cutoff=7200):
@@ -85,7 +100,7 @@ def is_flare_observed(list1,list2, cutoff=7200):
     #test=['03/28/02', '04/04/02', '04/04/02', '04/18/02', '04/22/02', '04/29/02', '04/30/02', '04/30/02', '05/17/02', '05/17/02']
     #test2=['05/28/07', '05/28/07', '04/04/02', '05/29/07', '05/29/07', '05/30/07', '06/01/07', '06/01/07', '06/01/07', '06/01/07']
     #found_list = list(set(aa) & set(bb)) #This misses things that might have happened on different days relative to RHESSI/messenger. Can fix this by just checking diff in datetime? for future test....
-    
+
     IDs,newfoundlist, nMtime,nRtime,nMdt,nRdt=[],[],[],[],[],[]
     for dt,id in zip(dt1,id1):
         closest = map(lambda d: abs(d-dt), dt2) #this is a list
@@ -98,17 +113,16 @@ def is_flare_observed(list1,list2, cutoff=7200):
                 nMdt.append(dt2[index])
                 nRdt.append(dt)
                 IDs.append(id)
-                        
 
     list_dict={'ID':IDs,'date':newfoundlist, 'Messenger_time':nMtime, 'RHESSI_time':nRtime, 'Messenger_datetime':nMdt,'RHESSI_datetime':nRdt}
     #list_dict = 'foo'
     return list_dict
-    
+
 def messenger_flare_angle(flare_list):
     '''Executes sswidl function messenger_flare_angle()'''
     angle_list=[]
     idl = pidly.IDL('/Users/wheatley/Documents/Solar/sswidl_py.sh')
-   
+
     for flare in flare_list['date'][0:10]:
         #is_observed == False:
         #    angle=-1
@@ -146,7 +160,7 @@ def save_flare_list_idl(flare_list, fname):
         Met=flare_list['Mend_time']
         Rst=flare_list['Rstart_time']
         Ret=flare_list['Rend_time']
-    
+
     idl = pidly.IDL('/Users/wheatley/Documents/Solar/sswidl_py.sh')
     #transfer variables there
     idl('len',length)
@@ -166,14 +180,14 @@ def save_flare_list_idl(flare_list, fname):
         idl('flare_list={date:dates,Messenger_time:Mtimes,RHESSI_time:Rtimes}')
     #save them
     idl('save,flare_list, filename=fname')
-    
+
 def plot_angle_distribution(angle_list):
     '''make a histogram of the angle distributions'''
-     
+
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
     n, bins, patches = plt.hist(angle_list['Angle'], 18, facecolor='green', alpha=0.75)
-    
+
     plt.xlabel('Angle between Earth and Mercury (degrees)')
     plt.ylabel('Number of Events')
     #ax1.set_ylim([0,1])
@@ -195,7 +209,7 @@ def list_selected(indices=[9,10,16,18]):
         lMtime.append(list['Messenger_time'][index])
         lRtime.append(list['RHESSI_time'][index])
         lMdt.append(list['Messenger_datetime'][index])
-        lRdt.append(list['RHESSI_datetime'][index])        
+        lRdt.append(list['RHESSI_datetime'][index])
     list_selected={'date':ldate,'Messenger_time':lMtime,'RHESSI_time':lRtime, 'Messenger_datetime':lMdt,'RHESSI_datetime':lRdt}
     #print list_selected
     return list_selected
@@ -216,27 +230,27 @@ def select_time_intervals(flare_list,before=10,after=10):
     time_intervals={'Mstart_time':Mstarttime,'Mend_time':Mendtime,'Rstart_time':Rstarttime,'Rend_time':Rendtime}
     flare_list.update(time_intervals) #adds these to the flare list dictionary
     return flare_list
-    
-if __name__ == "__main__":
-    os.chdir('/Users/wheatley/Documents/Solar/occulted_flares/')
-    occulted_list = read_flare_list(filename='list_filtered.csv')
-    messenger_list = read_flare_list(filename='messenger_list.csv')
-    list_observed = is_flare_observed(occulted_list, messenger_list,cutoff=3600)
-    save_flare_list(list_observed,'list_observed_1hour.p')
-    pd.DataFrame(list_observed).to_csv('list_observed_1hour.csv')
-    #df.to_csv('list_observed_1hour.csv')
-    #pickle.load(open('list_observed.p','rb'))
-    #list_selected=list_selected()
-    #save_flare_list(list_selected,'list_selected.p')    
-    #save_flare_list_idl(list_selected,'list_selected.sav')
-    #time_intervals=select_time_intervals(list_selected)
-    #save_flare_list(time_intervals,'time_intervals.p')        
-    #save_flare_list_idl(time_intervals,'time_intervals.sav')
 
-    #angle_list = messenger_flare_angle(messenger_list)
-    #plot_angle_distribution(angle_list)
-    #save_flare_list(angle_list)
-    #angle_list = read_flare_list(filename='messenger_angles.csv')
-    #plot_angle_distribution(angle_list)
+# if __name__ == "__main__":
+#     os.chdir('/Users/wheatley/Documents/Solar/occulted_flares/')
+#     occulted_list = read_flare_list(filename='list_filtered.csv')
+#     messenger_list = read_flare_list(filename='messenger_list.csv')
+#     list_observed = is_flare_observed(occulted_list, messenger_list,cutoff=3600)
+#     save_flare_list(list_observed,'list_observed_1hour.p')
+#     pd.DataFrame(list_observed).to_csv('list_observed_1hour.csv')
+#     #df.to_csv('list_observed_1hour.csv')
+#     #pickle.load(open('list_observed.p','rb'))
+#     #list_selected=list_selected()
+#     #save_flare_list(list_selected,'list_selected.p')
+#     #save_flare_list_idl(list_selected,'list_selected.sav')
+#     #time_intervals=select_time_intervals(list_selected)
+#     #save_flare_list(time_intervals,'time_intervals.p')
+#     #save_flare_list_idl(time_intervals,'time_intervals.sav')
 
-    
+#     #angle_list = messenger_flare_angle(messenger_list)
+#     #plot_angle_distribution(angle_list)
+#     #save_flare_list(angle_list)
+#     #angle_list = read_flare_list(filename='messenger_angles.csv')
+#     #plot_angle_distribution(angle_list)
+
+

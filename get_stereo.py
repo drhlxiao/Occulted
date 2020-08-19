@@ -33,38 +33,58 @@ import sunpy.coordinates
 import sunpy.coordinates.wcs_utils
 from sunpy.net import vso
 
-def query(flare,vc,i):
+def query(flare,vc,i, AIAwave, all=False,timedelta=5):
     '''Query the VSO client for a particular flare - assume client has already been initialized in main loop'''
     #print 'STEREO_'+flare.Datetimes['RHESSI_datetimes'][i],'\n',dt.strftime(flare.Datetimes['Messenger_datetimes'][i].date(),'%Y-%m-%d'),'\n',dt.strftime(flare.Datetimes['Messenger_datetimes'][i],'%Y-%m-%dT%H:%M:%S'),'\n',dt.strftime(flare.Datetimes['Messenger_datetimes'][i].date()+td(days=1),'%Y-%m-%d')
+    res=[]
     inst=flare.Notes[i]
-    print inst
+    #print inst
     stereo = (vso.attrs.Source('STEREO_'+inst) &
           vso.attrs.Instrument('EUVI') &
-          vso.attrs.Time(dt.strftime(flare.Datetimes['Messenger_datetimes'][i],'%Y-%m-%dT%H:%M:%S'), dt.strftime(flare.Datetimes['Messenger_datetimes'][i]+td(minutes=5),'%Y-%m-%dT%H:%M:%S'))) #using field RHESSI datetimes to store closest stereo satellite
-    res=[]
-    aia304 = (vso.attrs.Instrument('AIA') &
-       vso.attrs.Sample(24 * u.hour) &
-       vso.attrs.Time(dt.strftime(flare.Datetimes['Messenger_datetimes'][i],'%Y-%m-%dT%H:%M:%S'),dt.strftime(flare.Datetimes['Obs_end_time'][i],'%Y-%m-%dT%H:%M:%S')))
-    aia171 = (vso.attrs.Instrument('AIA') &
-       vso.attrs.Sample(24 * u.hour) &
-       vso.attrs.Time(dt.strftime(flare.Datetimes['Messenger_datetimes'][i],'%Y-%m-%dT%H:%M:%S'),dt.strftime(flare.Datetimes['Obs_end_time'][i],'%Y-%m-%dT%H:%M:%S')))
-    aia193 = (vso.attrs.Instrument('AIA') &
-       vso.attrs.Sample(24 * u.hour) &
-       vso.attrs.Time(dt.strftime(flare.Datetimes['Messenger_datetimes'][i],'%Y-%m-%dT%H:%M:%S'),dt.strftime(flare.Datetimes['Obs_end_time'][i],'%Y-%m-%dT%H:%M:%S')))
-    #print dt.strftime(flare.Datetimes['Messenger_datetimes'][i],'%Y-%m-%dT%H:%M:%S'),dt.strftime(flare.Datetimes['Obs_end_time'][i],'%Y-%m-%dT%H:%M:%S')
-    wave = vso.attrs.Wave(16.9 * u.nm, 17.2 * u.nm) #19.0 - 19.5
-    res.append(vc.query(wave, aia171))
-    wave = vso.attrs.Wave(19.1 * u.nm, 19.45 * u.nm) #19.0 - 19.5
-    res.append(vc.query(wave, aia193))
-    wave = vso.attrs.Wave(30 * u.nm, 31 * u.nm) #19.0 - 19.5
-    res.append(vc.query(wave, aia304))
-    wave = vso.attrs.Wave(19.1 * u.nm, 19.45 * u.nm) #19.0 - 19.5
+          vso.attrs.Time(dt.strftime(flare.Datetimes['Messenger_datetimes'][i],'%Y-%m-%dT%H:%M:%S'), dt.strftime(flare.Datetimes['Messenger_datetimes'][i]+td(minutes=timedelta),'%Y-%m-%dT%H:%M:%S'))) #using field RHESSI datetimes to store closest stereo satellite
+    aia = (vso.attrs.Instrument('AIA') &
+    vso.attrs.Sample(24 * u.hour) &
+    vso.attrs.Time(dt.strftime(flare.Datetimes['Messenger_datetimes'][i],'%Y-%m-%dT%H:%M:%S'),dt.strftime(flare.Datetimes['Obs_end_time'][i],'%Y-%m-%dT%H:%M:%S')))
+
+    if all:
+        aia304 = (vso.attrs.Instrument('AIA') &
+        vso.attrs.Sample(24 * u.hour) &
+        vso.attrs.Time(dt.strftime(flare.Datetimes['Messenger_datetimes'][i],'%Y-%m-%dT%H:%M:%S'),dt.strftime(flare.Datetimes['Obs_end_time'][i],'%Y-%m-%dT%H:%M:%S')))
+        aia171 = (vso.attrs.Instrument('AIA') &
+        vso.attrs.Sample(24 * u.hour) &
+        vso.attrs.Time(dt.strftime(flare.Datetimes['Messenger_datetimes'][i],'%Y-%m-%dT%H:%M:%S'),dt.strftime(flare.Datetimes['Obs_end_time'][i],'%Y-%m-%dT%H:%M:%S')))
+        aia193 = (vso.attrs.Instrument('AIA') &
+        vso.attrs.Sample(24 * u.hour) &
+        vso.attrs.Time(dt.strftime(flare.Datetimes['Messenger_datetimes'][i],'%Y-%m-%dT%H:%M:%S'),dt.strftime(flare.Datetimes['Obs_end_time'][i],'%Y-%m-%dT%H:%M:%S')))
+        wave = vso.attrs.Wave(16.9 * u.nm, 17.2 * u.nm) 
+        res.append(vc.query(wave, aia171))
+        wave = vso.attrs.Wave(19.1 * u.nm, 19.45 * u.nm)
+        res.append(vc.query(wave, aia193))
+        wave = vso.attrs.Wave(30 * u.nm, 31 * u.nm) 
+        res.append(vc.query(wave, aia304))
+        wave = vso.attrs.Wave(19.1 * u.nm, 19.45 * u.nm) 
+        res.append(vc.query(wave, stereo))
+        print(res)
+        
+    if AIAwave=='171':
+        wave = vso.attrs.Wave(16.9 * u.nm, 17.2 * u.nm) 
+        res.append(vc.query(wave, aia))
+    elif AIAwave=='193':
+        wave = vso.attrs.Wave(19.1 * u.nm, 19.45 * u.nm) 
+        res.append(vc.query(wave, aia))
+    else: #default to 304
+        wave = vso.attrs.Wave(30 * u.nm, 31 * u.nm) 
+        res.append(vc.query(wave, aia))
+        
+    wave = vso.attrs.Wave(19.1 * u.nm, 19.45 * u.nm) 
     res.append(vc.query(wave, stereo))
-    print(res)
     return res
 
-def download_files(vc,res):
-    files = vc.get(res).wait()
+def download_files(vc,res,path=False):
+    if not path:
+        files = vc.get(res,path='/Users/wheatley/Documents/Solar/occulted_flares/data/stereo_pfloops/{file}.fts').wait()
+    else:
+        files = vc.get(res,path=path+'{file}.fts').wait()        
     print files
     return files
     
@@ -78,12 +98,12 @@ def make_maps(files): #should work once AIA is back up...
                 aiafiles.append(f)
             else:
                 stereofiles.append(f)
-        print aiafiles,stereofiles
+        #print aiafiles,stereofiles
     try:
-        aiafiles.append(stereofiles[0])
+        aiafiles.append(stereofiles[-1])
     except IndexError:
-        pass
-    #print aiafiles,stereofiles
+        aiafiles.append(stereofiles)
+    print aiafiles,stereofiles
     #aiafiles.append(stereofiles[0])
     maps = {m.instrument: m.submap((-1100, 1100) * u.arcsec,
                              (-1100, 1100) * u.arcsec) for m in sunpy.map.Map(aiafiles)}
@@ -110,6 +130,7 @@ def plot_aia(maps,aia_bottom_left,aia_width,aia_height,flare_list,i,quiet=True,s
     for m,wave in zip(tags,['193','171','304']):
         try:
             maps[m]
+            lastmap=maps[m]
         except KeyError:
             continue
         fig = plt.figure()
@@ -127,8 +148,9 @@ def plot_aia(maps,aia_bottom_left,aia_width,aia_height,flare_list,i,quiet=True,s
                          #               aia_bottom_left[0] + aia_width)),
                          #   u.Quantity((aia_bottom_left[1],
                          #               aia_bottom_left[1] + aia_height)))
-        subaia.peek(draw_grid=True)
+        if not quiet: subaia.peek()
         #subaia.save(fname+'zoom.png',filetype='png')
+        return lastmap
 
 def point_check(maps,flare_list,i,corner=False):
     locstr=flare_list.Flare_properties['Location'][i]
@@ -207,7 +229,8 @@ def coord_transform(aia_bottom_left,aia_width,aia_height,maps):
     print(hpc_B)
     return hpc_B
 
-def plot_stereo(hpc_B,maps,aia_width,aia_height,flare_list,i,corner=False,quiet=True,save=False):    
+def plot_stereo(hpc_B,maps,aia_width,aia_height,flare_list,i,corner=False,quiet=True,save=False):
+    '''deprecated to oplot_limb'''
     fig = plt.figure(figsize=(6, 5))
     #for i, (m, coord) in enumerate(zip([maps['EUVI'], maps['AIA']],
     #                               [hpc_B, hpc_aia])):
@@ -249,95 +272,120 @@ def plot_stereo(hpc_B,maps,aia_width,aia_height,flare_list,i,corner=False,quiet=
 
     #@u.quantity_input(grid_spacing=u.deg)
     #[docs]
-def get_limb(map, axes=None, grid_spacing=180*u.deg, **kwargs):
-    """Adapted from sunpy draw_grid to get the matlptlib.lines.Line2D object that is at the limb. Here map is a SINGLE map object"""
-
-    if not axes:
-        axes = wcsaxes_compat.gca_wcs(map.wcs)
-
-    lines = []
-
-    # Do not automatically rescale axes when plotting the overlay
-    axes.set_autoscale_on(False)
-
-    transform = wcsaxes_compat.get_world_transform(axes)
-
-    XX, YY = np.meshgrid(np.arange(map.data.shape[0]),
-                             np.arange(map.data.shape[1]))
-    x, y = map.pixel_to_data(XX*u.pix, YY*u.pix)
-    dsun = map.dsun
-
-    b0 = map.heliographic_latitude.to(u.deg).value
-    l0 = map.heliographic_longitude.to(u.deg).value
-    units = map.spatial_units
-
-    # Prep the plot kwargs
-    plot_kw = {'color': 'white',
-                   'linestyle': 'dotted',
-                   'zorder': 100,
-                   'transform': transform}
-    plot_kw.update(kwargs)
-
-    #hg_longitude_deg = np.linspace(-180, 180, num=361) + l0
-    hg_latitude_deg = np.linspace(-90, 90, num=181)
-    hg_longitude_deg = np.arange(-180, 180, grid_spacing.to(u.deg).value) + l0
-        
-     # draw the longitude lines
-    for lon in hg_longitude_deg:
-        x, y = wcs.convert_hg_hpc(lon * np.ones(181), hg_latitude_deg,
-                                      b0_deg=b0, l0_deg=l0, dsun_meters=dsun,
-                                      angle_units=units[0], occultation=True)
-        valid = np.logical_and(np.isfinite(x), np.isfinite(y))
-        x = x[valid]
-        y = y[valid]
-        if wcsaxes_compat.is_wcsaxes(axes):
-            x = (x*u.arcsec).to(u.deg).value
-            y = (y*u.arcsec).to(u.deg).value
-        lines += axes.plot(x, y, **plot_kw)
-
-    # Turn autoscaling back on.
-    axes.set_autoscale_on(True)
-    return lines,axes
     
-def one_flare(i):
+def oplot_AIAlimb(AIAmap,EUVmap,quiet=False,both=False):
+    """From Simon Cadair's example"""
+    r = AIAmap.rsun_obs.to(u.deg)-1*u.arcsec # remove the one arcsec so it's on disk.
+    # Adjust the following range if you only want to plot on STEREO_A
+    th = np.linspace(-180*u.deg, 0*u.deg)
+    x = r * np.sin(th)
+    y = r * np.cos(th)
+
+    coords = SkyCoord(x, y, frame=AIAmap.coordinate_frame)
+
+    hgs = coords.transform_to('heliographic_stonyhurst')
+    hgs.D0 = EUVmap.dsun
+    hgs.L0 = EUVmap.heliographic_longitude
+    hgs.B0 = EUVmap.heliographic_latitude
+    coords = hgs.transform_to(EUVmap.coordinate_frame)
+    #if quiet: return coords
+    if both:
+        fig = plt.figure(figsize=(15, 5))
+        ax1 = fig.add_subplot(1, 2, 1, projection=AIAmap)
+        AIAmap.plot(axes=ax1)
+        #maps['AIA'].draw_limb()
+
+        ax2 = fig.add_subplot(1, 2, 2, projection=EUVmap)
+        EUVmap.plot(axes=ax2)
+        ax2.plot_coord(coords,'-', color='w')
+        if not quiet:
+            fig.show()
+        else:
+            return fig
+    else:
+        fig = plt.figure(figsize=(10, 8))
+        ax2 = fig.add_subplot(1, 1, 1, projection=EUVmap)
+        EUVmap.plot(axes=ax2)
+        ax2.plot_coord(coords,'-', color='w') #why won't it be a dashed line?
+        if not quiet:
+            fig.show()
+        return fig
+            
+def one_flare(flare_list,i):
     '''Do everything for one flare'''
-    import data_management2 as d
-    flare_list=d.Data_Study('flare_lists/list_final.sav')
-    vc = vso.VSOClient()
-    files=[]
-    res=query(flare_list,vc,i)
-    if not res:
-        pass
-    for r in res:
-        try:
-            files.append(download_files(vc,r))
-        except AttributeError:
-            continue
-    for f in files[0:2]:
-        try:
-            if not 'aia' in f[0]:
+    #import data_management2 as d
+    #flare_list=d.OCData('flare_lists/list_final.sav')
+    files=[]#search_local_fits(flare_list,i)
+    #ff=[files[0][0],files[1][0]]
+    if files == []:
+        vc = vso.VSOClient()
+        res=query(flare_list,vc,i,'304')
+        if not res:
+            pass
+        for r in res:
+            try:
+                files.append(download_files(vc,r))
+            except AttributeError:
                 continue
-        except IndexError:
-            continue
+        for f in files[0:2]:
+            try:
+                if not 'aia' in f[0]:
+                    continue
+            except IndexError:
+                continue
+    ff=[files[0][0],files[1][0]]
     aia_bottom_left,aia_width,aia_height=coords_aia(flare_list,i)
-    maps=make_maps(files)
+    maps=make_maps(ff)
     if maps == []:
         pass
-    ct=coord_transform(aia_bottom_left,aia_width,aia_height,maps)
-    plot_aia(maps,aia_bottom_left,aia_width,aia_height,flare_list,i)
+    AIAmap=plot_aia(maps,aia_bottom_left,aia_width,aia_height,flare_list,i)
     try:
-        corner=pick_corner(ct)
-    except IndexError:
-        pass
-    plot_stereo(ct,maps,aia_width,aia_height,flare_list,i,corner=corner)
+        foo=oplot_AIAlimb(AIAmap, maps['SECCHI'],quiet=True)
+    except KeyError:
+        return
+    fname='/Users/wheatley/Documents/Solar/occulted_flares/data/stereo-aia/'+dt.strftime(flare_list.Datetimes['Messenger_datetimes'][i].date(),'%Y%m%d')+'EUVI_limb.png'
+    foo.savefig(fname)
+    
+    #ct=coord_transform(aia_bottom_left,aia_width,aia_height,maps)
+    #plot_aia(maps,aia_bottom_left,aia_width,aia_height,flare_list,i)
+    #try:
+    #    corner=pick_corner(ct)
+    #except IndexError:
+    #    pass
+    #plot_stereo(ct,maps,aia_width,aia_height,flare_list,i,corner=corner)
 
+def loop_flares(filen=False):
+    import data_management2 as d
+    if not filen:
+        flare_list=d.OCData('flare_lists/list_final.sav')
+    else:
+        flare_list=d.OCData('flare_lists/'+filen)
+    for i in range(1,len(flare_list.ID)):
+        one_flare(flare_list,i)
+
+def download_for_IDL(flare_list):
+    for i in range(1,len(flare_list.ID)):
+        files=[]#search_local_fits(flare_list,i)
+    #ff=[files[0][0],files[1][0]]
+        if files == []:
+            vc = vso.VSOClient()
+            res=query(flare_list,vc,i,'304',timedelta=30)
+            if not res:
+                pass
+            for r in res:
+                try:
+                    files.append(download_files(vc,r))
+                except AttributeError:
+                    continue
+
+    
 def search_local_fits(flare_list,i,aia=True,euv=True,wave='304'):
     '''see if the file is already available locally in ~/sunpy/data'''
     import glob
     files=[]
     if aia:
         nameaia='aia_lev1_'+wave+'a_'+dt.strftime(flare_list.Datetimes['Messenger_datetimes'][i],'%Y_%m_%d')+'*.fits'
-        print nameaia
+        #print nameaia
         files.append(glob.glob('/Users/wheatley/sunpy/data/'+nameaia))
     if euv:
         nameeuv=dt.strftime(flare_list.Datetimes['Messenger_datetimes'][i],'%Y%m%d')+'_*eub.*fts'
@@ -345,7 +393,7 @@ def search_local_fits(flare_list,i,aia=True,euv=True,wave='304'):
     return files
     
 #import data_management2 as d
-#flare_list=d.Data_Study('flare_lists/list_final.sav')
+#flare_list=d.OCData('flare_lists/list_final.sav')
 #vc = vso.VSOClient()
 #for i in range(1,len(flare_list.ID)):
 #    #i=19 #i=8 gets the location wrong...

@@ -1,6 +1,6 @@
  #######################################
 # flare_class.py
-# Erica Lastufka 17/5/17 
+# Erica Lastufka 17/5/17
 
 #Description: Class of functions to deal with all data,files,calculations of the study. Maybe merge this with calculations since they are so interrelated
 #######################################
@@ -9,10 +9,10 @@ import numpy as np
 
 class OCProperties(object):
     ''' Object will have the following attributes:
-            T1: 
+            T1:
             EM1:
-            T2: 
-            EM2: 
+            T2:
+            EM2:
             chisq: chisq value from ospex fit
             GOES_GOES: GOES flux , short channel
             GOES_GOES_long: GOES flux , long channel
@@ -21,9 +21,9 @@ class OCProperties(object):
             source_vis:
             source_pos:
             source_pos_disk: source position projected down onto disk if necessary
-            source_pos_STEREO: 
+            source_pos_STEREO:
             f1pos: in case this is different than what is used in the loops?
-            f2pos:  
+            f2pos:
             loop: dictionary of loop data
             Rheight: Calculated rhessi height above limb
             occ_percent: occultation percentage
@@ -41,14 +41,14 @@ class OCProperties(object):
             Notes
         Methods are:
             all the calculation methods...'''
-    
+
     def __init__(self, ID, legacy=True, filename=False,calc_missing=True,att_dict=False):
         '''Return an empty Data_Study object, unless a filename to a correctly formatted csv is given. Do I need to be able to go from a dictionary to an object too?'''
         if att_dict: #distribute these
             legacy=False
             for k in att_dict.keys():
                 setattr(self,k,att_dict[k]) #types?
-                
+
         tags=['T2','EM2','chisq','source_pos_STEREO','f1pos','f2pos','loop','Rheight','occ_percent','source_pos_disk','GOES_GOES_long','Messenger_GOES_long','e4','e5','e6','e7','e8','e9','e10']
         if legacy: #get info from legacy OCData object and the associated csv/sav files
             if not filename:
@@ -68,7 +68,7 @@ class OCProperties(object):
             self.ratio=self.Messenger_GOES/self.GOES_GOES
             for att,key in zip(tags,tags):
                 setattr(self,att,'')
- 
+
         #if not legacy:
         #    #read attributes from csv file (can just restore the pickle file otherwise. Build this into OCFlare class):
         #    import pandas as pd
@@ -94,7 +94,7 @@ class OCProperties(object):
             self.convert2stereo()
             self.readloops(ID)
             #etc
-            
+
         #self.Notes=''
 
     def get_index(self,ID,data):
@@ -117,7 +117,7 @@ class OCProperties(object):
             attv=getattr(self,att)
             if type(attv) == str and attv.startswith('{'):
                 setattr(self,att,ast.literal_eval(attv))
-    
+
     def write(self, picklename=False):
         '''Write object to pickle'''
         import pickle
@@ -133,30 +133,43 @@ class OCProperties(object):
             self.source_pos_disk.replace(',',';')
         if ',' in self.source_pos_STEREO:
             self.source_pos_STEREO.replace(',',';')
-        
+
         if not csvname: csvname= str(ID) + 'OCProperties.csv'
         d=self.__dict__
         import pandas as pd
         df = pd.io.json.json_normalize(d)
         df.to_csv(csvname)  #dict(orient='records')
 
-    def get_T_EM(self,ID): #read in the fit... use IDL cuz I'm too lazy to sift through the whole .fits file for the right keywords
+    def get_T_EM(self,ID, free=True): #read in the fit... use IDL cuz I'm too lazy to sift through the whole .fits file for the right keywords
         #put in error exception
         import pidly
         idl = pidly.IDL('/Users/wheatley/Documents/Solar/sswidl_py.sh')
         idl.filename = str(ID)
-        idl("aa=spex_read_fit_results('/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'aall_a.fits')")
-        params = idl.ev('aa.spex_summ_params')
-        self.T1=params[1]
-        self.T2=params[4]
-        self.EM1=params[0]
-        self.EM2=params[3]
-        self.chisq=idl.ev('aa.spex_summ_chisq')[0]
-        
+        xrsf=self.Files.dir + self.Files.folders['xrs_files']+self.Files.Raw['xrs_files']
+        idl.xrsf=xrsf
+        if free:
+            idl("aa=spex_read_fit_results(xrsf+'_free.fits')")
+            params = idl.ev('aa.spex_summ_params')
+            #self.T1=params[1]
+            self.T2=params[1]
+            #self.EM1=params[0]
+            self.EM2=params[0]
+            #self.chisq=idl.ev('aa.spex_summ_chisq')[0]
+            self.free_abund=params[2]
+        else:
+            idl("aa=spex_read_fit_results(xrsf+'_chianti.fits')")
+            params = idl.ev('aa.spex_summ_params')
+            self.T1=params[1]
+            #self.T2=params[4]
+            self.EM1=params[0]
+            #self.EM2=params[3]
+            self.chisq=idl.ev('aa.spex_summ_chisq')[0]
+
+
     def convert2stereo(self): #convert RHESSI/AIA source location to stereo location (roughly, since if it's off the limb that will be hard) (How exactly should I go about this?)
         self.source_pos_STEREO = 0.0
-        
-    def readloops(self,ID,filename=False): #read loops spreadsheet and store values in self. 
+
+    def readloops(self,ID,filename=False): #read loops spreadsheet and store values in self.
         if not filename:
             filename= '/Users/wheatley/Documents/Solar/occulted_flares/data/stereo_pfloops/loops.csv'#default file to read
         import pandas as pd
@@ -166,7 +179,7 @@ class OCProperties(object):
         except IndexError: #no loop data!
             self.loop={'footpoints1':'','length1':'','ellipse1':'','eccentricity1':'','Footpoints2':'','length2':'','ellipse2':'','eccentricity2':'','center':'','notes':''}
             return
-            
+
         #do some formatting of the data before placing it into the dictionary...
         def format_fp(fstr):
             if fstr=='' or type(fstr) != str:
@@ -186,13 +199,13 @@ class OCProperties(object):
 
         fp1=format_fp(data['Footpoints1'][i])
         fp2=format_fp(data['Footpoints2'][i])
-        
+
         def format_coords(cstr):
             if cstr=='' or type(cstr) != str:
                 return cstr
             coords=[float(cstr[cstr.find('[')+1:cstr.find(';')]),float(cstr[cstr.find(';')+1:cstr.find(']')])]
             return coords
-        
+
         center=format_coords(data['center'][i])
         e1=format_coords(data['ellipse2'][i])
         e2=format_coords(data['ellipse2'][i])

@@ -90,7 +90,7 @@ def plot_angle_distribution(list_obj,ymax=10):
     plt.xlabel('Angle between Earth and Mercury (degrees)')
     plt.ylabel('Number of Events')
     ax1.set_ylim([0,ymax])
-    #ax1.set_xlim([0,150])
+    ax1.set_xlim([0,180])
 
     ax1.plot()
 
@@ -170,40 +170,64 @@ def plot_goes_ratio(list_obj, title= "",ymin=0, ymax=3, labels=1,ylog=False, goe
             gc=list_obj.Flare_properties["GOES_GOES"]
             ylabel='Messenger_GOES/Observed_GOES'
     for angle, mval,rval,chisq,ids,dts in zip(list_obj.Angle,mc,gc,list_obj.Notes,list_obj.ID,list_obj.Datetimes['Obs_start_time']):
-        if type(rval) != float and len(rval) > 3:#:type(rval) != float : #or np.isnan(rval) == False:
-            ang.append(angle)
+        try:
+            rval=float(rval)
+            mval=float(mval)
+            #ang.append(angle)
             if cc=='GOES':
-                if rval.startswith('X'): colors.append('r')
-                elif rval.startswith('M'):colors.append('m')
-                elif rval.startswith('C'):colors.append('y')
-                elif rval.startswith('B'):colors.append('g')
-                elif rval.startswith('A'):colors.append('b')
-                else: colors.append('k')
+                #print np.rint(-np.log10(rval))
+                if np.rint(-np.log10(rval)) <= 4.0:colors.append('r')
+                elif np.rint(-np.log10(rval)) == 5.0:colors.append('m')
+                elif np.rint(-np.log10(rval)) == 6.0:colors.append('y')
+                elif np.rint(-np.log10(rval)) == 7.0:colors.append('g')
+                elif np.rint(-np.log10(rval)) == 8.0:colors.append('b')
+                elif np.rint(-np.log10(rval)) == 9.0:colors.append('k')
             else: #color code by other one
-                if mval.startswith('X'): colors.append('r')
-                elif mval.startswith('M'):colors.append('m')
-                elif mval.startswith('C'):colors.append('y')
-                elif mval.startswith('B'):colors.append('g')
-                elif mval.startswith('A'):colors.append('b')
-                else: colors.append('k')
-                
+                if np.rint(-np.log10(mval)) <= 4.0:colors.append('r')
+                elif np.rint(-np.log10(mval)) == 5.0:colors.append('m')
+                elif np.rint(-np.log10(mval)) == 6.0:colors.append('y')
+                elif np.rint(-np.log10(mval)) == 7.0:colors.append('g')
+                elif np.rint(-np.log10(mval)) == 8.0:colors.append('b')
+                elif np.rint(-np.log10(mval)) == 9.0:colors.append('k')
+            rf=rval                
+            mf=mval
+        except ValueError:
+            if type(rval) != float and len(rval) > 3:#:type(rval) != float : #or np.isnan(rval) == False:
+                #ang.append(angle)
+                if cc=='GOES':
+                    if rval.startswith('X'): colors.append('r')
+                    elif rval.startswith('M'):colors.append('m')
+                    elif rval.startswith('C'):colors.append('y')
+                    elif rval.startswith('B'):colors.append('g')
+                    elif rval.startswith('A'):colors.append('b')
+                    else: colors.append('k')
+                else: #color code by other one
+                    if mval.startswith('X'): colors.append('r')
+                    elif mval.startswith('M'):colors.append('m')
+                    elif mval.startswith('C'):colors.append('y')
+                    elif mval.startswith('B'):colors.append('g')
+                    elif mval.startswith('A'):colors.append('b')
+                    else: colors.append('k')                
             rf=convert_goes2flux(rval)
             mf=convert_goes2flux(mval)
-            mvals.append(mf)
-            rvals.append(rf)
-            if rf != -1:
-                labelang.append(angle)
-                labelratio.append(mf/rf)
-                if labels==1:
-                    coordlabel.append(ids)
-                else: #0 or 2
-                    coordlabel.append(datetime.strftime(dts,'%D %H:%M'))
-            if scatter:
-                delta = 50
-            elif chisq == '':#notes column is empty
-                delta.append(5000*10*2**np.rint(np.log10(np.abs(rf-mf)))) #difference in size between the GOES classes
-            else: #notes carries chisq value
-                 delta.append(50*10*2**np.rint(np.log10(float(chisq))))
+
+        mvals.append(mf)
+        rvals.append(rf)
+        ang.append(angle)
+        if rf != -1 and rf !=0.:
+            labelang.append(angle)
+            labelratio.append(mf/rf)
+            if labels==1:
+                coordlabel.append(ids)
+            else: #0 or 2
+                coordlabel.append(datetime.strftime(dts,'%D %H:%M'))
+        if scatter:
+              delta = 50
+        elif chisq == '':#notes column is empty
+            delta.append(5000*10*2**np.rint(np.log10(np.abs(rf-mf)))) #difference in size between the GOES classes
+        else: #notes carries chisq value
+            delta.append(50*10*2**np.rint(np.log10(float(chisq))))
+
     ratio = np.array(mvals)/np.array(rvals)
     full_ratio = ratio #for now ...
     #print list_obj.Flare_properties["RHESSI_GOES"]
@@ -349,7 +373,7 @@ def select_outliers(flare_list, ratio, angle=90.,threshold=10.): #greater than g
     indices=[]
     newlist=copy.deepcopy(flare_list)
     for i,flare in enumerate(flare_list.ID):
-        if np.abs(ratio[i]) > threshold and flare_list.Angle[i] > angle:
+        if np.abs(ratio[i]) > threshold and flare_list.Angle[i] < angle:
             indices.append(i)
     newlist.slice(indices)    
     return newlist
@@ -434,7 +458,10 @@ def open_in_RHESSI_browser(flare_list, opent=False):
         if ans != 'Y':
             opent = False        
     for i,dt in enumerate(flare_list.Datetimes['RHESSI_datetimes']):
-        address=browserurl + dt.strftime('%Y%m%d') + '&time=' +dt.strftime('%H%M%S')
+        try:
+            address=browserurl + dt.strftime('%Y%m%d') + '&time=' +dt.strftime('%H%M%S')
+        except AttributeError: #datetime for RHESSI is empty
+            address=browserurl + flare_list.Datetimes['Messenger_datetimes'][i].strftime('%Y%m%d') + '&time=' +flare_list.Datetimes['Messenger_datetimes'][i].strftime('%H%M%S')            
         flare_list.Data_properties['RHESSI_browser_urls'][i] = address
         if opent:
             webbrowser.open_new_tab(address)
@@ -456,27 +483,32 @@ def select_time_intervals(flare_list,before=10,after=10):
     flare_list.update(time_intervals) #adds these to the flare list dictionary
     return flare_list
 
-def make_plots(flist='full',wavelength='short',temp='1T',abund=True,type='scat',all=False):
+def make_plots(flist='full',wavelength='short',temp='1T',abund=True,ptype='scat',flux=False,pall=False,ymin=0.001,ymax=1000):
     '''Make selected plots cuz I'm lazy'''
     os.chdir('/Users/wheatley/Documents/Solar/occulted_flares/flare_lists')
     if flist == 'full': fliststr='all Messenger'
     if flist == 'joint': fliststr='jointly observed'
     if flist == 'vis': fliststr='visibly occulted'
     
-    if not all:
-        filename=flist+'_'+wavelength+'_'+temp+'_abund.sav'
-        savename='../plots/'+flist+'_'+wavelength+'_'+temp+'_abund'
-        abundstr = ' with abundances'
+    if not pall:
+        if not flux:
+            filename=flist+'_'+wavelength+'_'+temp+'_abund.sav'
+            savename='../plots/'+flist+'_'+wavelength+'_'+temp+'_abund'
+            abundstr = ' with abundances'
+        else:
+            filename=flist+'_'+wavelength+'_'+temp+'_abund_flux.sav'
+            savename='../plots/'+flist+'_'+wavelength+'_'+temp+'_abund_flux'
+            abundstr = ' with abundances'            
         if not abund:
             filename=flist+'_'+wavelength+'_'+temp+'.sav'
             abundstr=''
             savename='../plots/'+flist+'_'+wavelength+'_'+temp
         f=da.Data_Study(filename)
         title='Ratio of Messenger GOES to observed GOES for '+ fliststr + ' flares,\n' + wavelength + ' channel flux, ' + temp + ' fit' + abundstr
-        if type =='scat':
-            foo=plot_goes_ratio(f,title=title, mgoes='goes',scatter=True,labels=0,ymin=0.001,ymax=1000,ylog=True,save=savename+'_scat.png')
-        elif type == 'scat2': 
-            foo=plot_goes_ratio(f,title=title, mgoes='goes',scatter=True,labels=0,ymin=0.001,ymax=1000,ylog=True,cc='M',save=savename+'_scat2.png')
+        if ptype =='scat':
+            foo=plot_goes_ratio(f,title=title, mgoes='goes',scatter=True,labels=0,ymin=ymin,ymax=ymax,ylog=True,save=savename+'_scat.png')
+        elif ptype == 'scat2': 
+            foo=plot_goes_ratio(f,title=title, mgoes='goes',scatter=True,labels=0,ymin=ymin,ymax=ymax,ylog=True,cc='M',save=savename+'_scat2.png')
         else: #type = hist #need these elses to execute when 'all' also...
             foo=hist_ratio(f,title=title, gc='overlay',save=savename+'_hist.png')
 
@@ -503,99 +535,15 @@ def make_plots(flist='full',wavelength='short',temp='1T',abund=True,type='scat',
                        print filename2 +' was not found!'
                        continue
                        
-                   title1='Ratio of Messenger GOES to observed GOES for '+ fliststr + ' flares,\n' + wavelength + ' channel flux, ' + temp + ' fit with abundances'
-                   title2='Ratio of Messenger GOES to observed GOES for '+ fliststr + ' flares,\n' + wavelength + ' channel flux, ' + temp + ' fit'
-                   foo=plot_goes_ratio(f1,title=title1, mgoes='goes',scatter=True,labels=0,ymin=0.001,ymax=1000,ylog=True,save=savename1+'_scat.png',show=False)
-                   foo=plot_goes_ratio(f1,title=title1, mgoes='goes',scatter=True,labels=0,ymin=0.001,ymax=1000,ylog=True,cc='M',save=savename1+'_scat2.png',show=False)
+                   title1='Ratio of Messenger GOES to observed GOES for '+ fliststr + ' flares,\n' + wavelength + ' channel flux, ' + t + ' fit with abundances'
+                   title2='Ratio of Messenger GOES to observed GOES for '+ fliststr + ' flares,\n' + wavelength + ' channel flux, ' + t + ' fit'
+                   foo=plot_goes_ratio(f1,title=title1, mgoes='goes',scatter=True,labels=0,ymin=ymin,ymax=ymax,ylog=True,save=savename1+'_scat.png',show=False)
+                   foo=plot_goes_ratio(f1,title=title1, mgoes='goes',scatter=True,labels=0,ymin=ymin,ymax=ymax,ylog=True,cc='M',save=savename1+'_scat2.png',show=False)
                    foo=hist_ratio(f1,title=title1, gc='overlay',save=savename1+'_hist.png',show=False)
               
-                   foo=plot_goes_ratio(f2,title=title2, mgoes='goes',scatter=True,labels=0,ymin=0.001,ymax=1000,ylog=True,save=savename2+'_scat.png',show=False)
-                   foo=plot_goes_ratio(f2,title=title2, mgoes='goes',scatter=True,labels=0,ymin=0.001,ymax=1000,ylog=True,cc='M',save=savename2+'_scat2.png',show=False)
+                   foo=plot_goes_ratio(f2,title=title2, mgoes='goes',scatter=True,labels=0,ymin=ymin,ymax=ymax,ylog=True,save=savename2+'_scat.png',show=False)
+                   foo=plot_goes_ratio(f2,title=title2, mgoes='goes',scatter=True,labels=0,ymin=ymin,ymax=ymax,ylog=True,cc='M',save=savename2+'_scat2.png',show=False)
                    foo=hist_ratio(f2,title=title2, gc='overlay',save=savename2+'_hist.png',show=False)
 
-    os.chdir('/Users/wheatley/Documents/Solar/MiSolFA/code/Occulted')
+    os.chdir('/Users/wheatley/Documents/Solar/occulted_flares/code')
         
-    #GOES ratio scatter plots for:
-    #entire messenger list, short wavelength, 1T
-    #entire messenger list, long wavelength, 1T
-    #entire messenger list, short wavelength, 2T
-    #entire messenger list, long wavelength, 2T
-    #entire messenger list, short wavelength, 1T, with abundances
-    #entire messenger list, long wavelength, 1T, with abundances
-    #entire messenger list, short wavelength, 2T, with abundances
-    #entire messenger list, long wavelength, 2T, with abundances
-
-    #joint observed list, short wavelength, 1T
-    #joint observed list, long wavelength, 1T
-    #joint observed list, short wavelength, 2T
-    #joint observed list, long wavelength, 2T
-    #joint observed list, short wavelength, 1T, with abundances
-    #joint observed list, long wavelength, 1T, with abundances
-    #joint observed list, short wavelength, 2T, with abundances
-    #joint observed list, long wavelength, 2T, with abundances
-   
-    #visibly occulted list, short wavelength, 1T
-    #visibly occulted list, long wavelength, 1T
-    #visibly occulted list, short wavelength, 2T
-    #visibly occulted list, long wavelength, 2T
-    #visibly occulted list, short wavelength, 1T, with abundances
-    #visibly occulted list, long wavelength, 1T, with abundances
-    #visibly occulted list, short wavelength, 2T, with abundances
-    #visibly occulted list, long wavelength, 2T, with abundances
-   
-    #GOES ratio scatter plots, coloured by Messenger category, for:
-    #entire messenger list, short wavelength, 1T
-    #entire messenger list, long wavelength, 1T
-    #entire messenger list, short wavelength, 2T
-    #entire messenger list, long wavelength, 2T
-    #entire messenger list, short wavelength, 1T, with abundances
-    #entire messenger list, long wavelength, 1T, with abundances
-    #entire messenger list, short wavelength, 2T, with abundances
-    #entire messenger list, long wavelength, 2T, with abundances
-
-    #joint observed list, short wavelength, 1T
-    #joint observed list, long wavelength, 1T
-    #joint observed list, short wavelength, 2T
-    #joint observed list, long wavelength, 2T
-    #joint observed list, short wavelength, 1T, with abundances
-    #joint observed list, long wavelength, 1T, with abundances
-    #joint observed list, short wavelength, 2T, with abundances
-    #joint observed list, long wavelength, 2T, with abundances
-   
-    #visibly occulted list, short wavelength, 1T
-    #visibly occulted list, long wavelength, 1T
-    #visibly occulted list, short wavelength, 2T
-    #visibly occulted list, long wavelength, 2T
-    #visibly occulted list, short wavelength, 1T, with abundances
-    #visibly occulted list, long wavelength, 1T, with abundances
-    #visibly occulted list, short wavelength, 2T, with abundances
-    #visibly occulted list, long wavelength, 2T, with abundances
-
-    #GOES ratio histograms for:
-    #entire messenger list, short wavelength, 1T
-    #entire messenger list, long wavelength, 1T
-    #entire messenger list, short wavelength, 2T
-    #entire messenger list, long wavelength, 2T
-    #entire messenger list, short wavelength, 1T, with abundances
-    #entire messenger list, long wavelength, 1T, with abundances
-    #entire messenger list, short wavelength, 2T, with abundances
-    #entire messenger list, long wavelength, 2T, with abundances
-
-    #joint observed list, short wavelength, 1T
-    #joint observed list, long wavelength, 1T
-    #joint observed list, short wavelength, 2T
-    #joint observed list, long wavelength, 2T
-    #joint observed list, short wavelength, 1T, with abundances
-    #joint observed list, long wavelength, 1T, with abundances
-    #joint observed list, short wavelength, 2T, with abundances
-    #joint observed list, long wavelength, 2T, with abundances
-   
-    #visibly occulted list, short wavelength, 1T
-    #visibly occulted list, long wavelength, 1T
-    #visibly occulted list, short wavelength, 2T
-    #visibly occulted list, long wavelength, 2T
-    #visibly occulted list, short wavelength, 1T, with abundances
-    #visibly occulted list, long wavelength, 1T, with abundances
-    #visibly occulted list, short wavelength, 2T, with abundances
-    #visibly occulted list, long wavelength, 2T, with abundances
-    

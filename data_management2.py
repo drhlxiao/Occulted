@@ -13,7 +13,7 @@
 ######################################
 import numpy as np
 
-class Data_Study(object):
+class OCData(object):
     ''' Dota for this study will have the following properties:
             ID: RHESSI flare ID (if applicable)
             Datetimes:
@@ -102,6 +102,13 @@ class Data_Study(object):
         '''Returns a generator that iterates over the object'''
         for attr, value in self.__dict__.iteritems():
             yield attr, value
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self):
+        '''Exit method'''
+        os.unlink(self.Data_Properties['csv_name'])
 
     def slice(self, indices):
         for n,i in enumerate(indices):
@@ -201,65 +208,6 @@ class Data_Study(object):
             writer.writerow(headers)
             for row in rows:
                 writer.writerow(row)
-        
-#    def export2idl_old(self, savname):
-#        '''because the dictionaries might be to big to send directly, read it in from the csv file'''
-#        #convert datetimes to IDL-friendly format
-#        #Format for time is YY/MM/DD, HHMM:SS.SSS
-#        #or alternatively, DD-Mon-YY HH:MM:SS.SSS -> '%d-%b-%Y %H:%M:%S.000'
-#        nMdt, nRdt,nOst,nOet = [],[],[],[]
-#        if type(self.Datetimes['RHESSI_datetimes'][0]) == str:
-#            #check that it's got quote marks then continue
-#            print 'dates are already strings!'
-#            if self.Datetimes['RHESSI_datetimes'][0].startswith("'") or self.Datetimes['RHESSI_datetimes'][0] == '':
-#                nMdt =self.Datetimes['Messenger_datetimes']
-#                nRdt = self.Datetimes['RHESSI_datetimes']
-#            else:
-#                #put quotes around everything
-#                for Mdt, Rdt in zip(self.Datetimes['Messenger_datetimes'], self.Datetimes['RHESSI_datetimes']): 
-#                    nMdt.append("'"+Mdt+"'") 
-#                nRdt.append("'"+Rdt+"'")
-#        else:
-#            for Mdt, Rdt in zip(self.Datetimes['Messenger_datetimes'], self.Datetimes['RHESSI_datetimes']): #will this work even when they're diffe#rent lengths? We'll see
-#                nMdt.append("'"+Mdt.strftime('%d-%b-%Y %H:%M:%S.000')+"'") #if you don't have the quotes idl won't read the csv in correctly
-#                nRdt.append("'"+Rdt.strftime('%d-%b-%Y %H:%M:%S.000')+"'")
-
-#        if (self.Datetimes['Obs_start_time'][0] != 0.0 and self.Datetimes['Obs_start_time'][0] != ''): #should change the default to be an empty string array...
-#            if type(self.Datetimes['Obs_start_time'][0]) == str:
-#                if self.Datetimes['Obs_start_time'][0].startswith("'"):
-#                    nOst=self.Datetimes['Obs_start_time']
-#                    nOet=self.Datetimes['Obs_end_time']
-#                else:
-#                    for Ost, Oet in zip(self.Datetimes['Obs_start_time'], self.Datetimes['Obs_end_time']): 
-#                        nOst.append("'"+Ost+"'") 
-#                        nOet.append("'"+Oet+"'")
-#            else:
-#                for Ost, Oet in zip(self.Datetimes['Obs_start_time'], self.Datetimes['Obs_end_time']): 
-#                    nOst.append("'"+Ost.strftime('%d-%b-%Y %H:%M:%S.000')+"'") 
-#                    nOet.append("'"+Oet.strftime('%d-%b-%Y %H:%M:%S.000')+"'")
-#            self.Datetimes['Obs_start_time']=nOst
-#            self.Datetimes['Obs_end_time']=nOet
-            
-#        self.Datetimes['RHESSI_datetimes']=nRdt
-#        self.Datetimes['Messenger_datetimes']=nMdt
-#        #print self.Datetimes['Messenger_datetimes'][0:10]
-#        #check if the csv file exists, if not, make it
-#        import glob
-#        if not savname[:-3]+'csv' in glob.glob('*.csv'):
-#            print 'no csv file found, converting to csv first'
-#            self.export2csv(savname[:-3]+'csv')
-#        else:
-#            ans=raw_input(savname[:-3]+'csv already exists! Overwrite? (Y/N)')
-#            if ans == 'Y':
-#                self.export2csv(savname[:-3]+'csv')
-
-#        import pidly
-#        idl = pidly.IDL('/Users/wheatley/Documents/Solar/sswidl_py.sh')
-#        idl('savname',savname)
-#        idl('csvname',savname[:-3]+'csv')
-#        idl('foo=read_csv(csvname)')
-#        idl('flare_list={ID:foo.field01,Datetimes:{Messenger_datetimes:foo.field02,RHESSI_datetimes:foo.field03,Obs_start_time:foo.field04,Obs_end_time:foo.field05},Flare_properties:{Messenger_T:foo.field06,Messenger_EM1:foo.field07,Messenger_GOES:foo.field08,Messenger_total_counts:foo.field09,RHESSI_GOES:foo.field10,GOES_GOES:foo.field11,RHESSI_total_counts:foo.field12,source_vis:foo.field13},Data_properties:{Messenger_data_path:foo.field14,RHESSI_data_path:foo.field15,XRS_files:foo.field16,QL_images:foo.field17,RHESSI_browser_urls:foo.field18,csv_name:foo.field19},Angle:foo.field20,Notes:foo.field21}') 
-#        idl('save,flare_list, filename=savname')
 
     def export2idl(self, savname):
         '''because the dictionaries might be to big to send directly, read it in from the csv file'''
@@ -307,100 +255,379 @@ class Data_Study(object):
         pickle.dump(self, open(picklename, 'wb'))
 
 
-def download_messenger(self):
-    '''Downloads Messenger .dat and .lbl files from the database, given event date. Can be used to get missing files too.'''
-    import urllib
-    dataurl = 'https://hesperia.gsfc.nasa.gov/messenger/'
-    #subfolders by year, month,day (except 2001)
-    listlen = len(self.ID)
-    for i,dt in zip(range(0,listlen -1),self.Datetimes['Messenger_datetimes']):
-        datestring=dt.strftime('%Y%j')
-        newurl=dataurl+datestring[0:4] #just the year
-        filename='/xrs'+datestring
-        datfile=filename+'.dat'
-        lblfile=filename+'.lbl'
-        #first check if the file is already there:
-        if not os.path.exists('/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.dat'):
-            urllib.urlretrieve(newurl+datfile,'/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.dat')
-        if not os.path.exists('/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.lbl'):
-            urllib.urlretrieve(newurl+lblfile,'/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.lbl')
-        #fill in the xrsfilename section
-        if not self.Data_properties['XRS_files'][i]:
-            self.Data_properties['XRS_files'][i]=filename
+    def download_messenger(self):
+        '''Downloads Messenger .dat and .lbl files from the database, given event date. Can be used to get missing files too.'''
+        import urllib
+        dataurl = 'https://hesperia.gsfc.nasa.gov/messenger/'
+        #subfolders by year, month,day (except 2001)
+        listlen = len(self.ID)
+        for i,dt in zip(range(0,listlen -1),self.Datetimes['Messenger_datetimes']):
+            datestring=dt.strftime('%Y%j')
+            newurl=dataurl+datestring[0:4] #just the year
+            filename='/xrs'+datestring
+            datfile=filename+'.dat'
+            lblfile=filename+'.lbl'
+            #first check if the file is already there:
+            if not os.path.exists('/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.dat'):
+                urllib.urlretrieve(newurl+datfile,'/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.dat')
+            if not os.path.exists('/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.lbl'):
+                urllib.urlretrieve(newurl+lblfile,'/Users/wheatley/Documents/Solar/occulted_flares/data/dat_files/'+filename+'.lbl')
+            #fill in the xrsfilename section
+            if not self.Data_properties['XRS_files'][i]:
+                self.Data_properties['XRS_files'][i]=filename
 
-def open_in_RHESSI_browser(self, opent=False):
-    import webbrowser
-    browserurl = 'http://sprg.ssl.berkeley.edu/~tohban/browser/?show=grth1+qlpcr+qlpg9+qli02+qli03+qli04+synff&date=' #20120917&time=061500'
-    #subfolders by year, month,day (except 2001)
-    #warn if you're opening more than 20 tabs
-    if opent == True and len(self.ID) > 20:
-        ans = raw_input('You are about to open ' + str(len(self.ID)) + ' tabs! Are you sure?')
-        if ans != 'Y':
-            opent = False        
-    for i,dt in enumerate(self.Datetimes['Messenger_datetimes']):
-        try:
-            address=browserurl + dt.strftime('%Y%m%d') + '&time=' +dt.strftime('%H%M%S')
-        except AttributeError: #datetime for RHESSI is empty
-            address=browserurl + self.Datetimes['Messenger_datetimes'][i].strftime('%Y%m%d') + '&time=' +self.Datetimes['Messenger_datetimes'][i].strftime('%H%M%S')
-        if not self.Data_properties['RHESSI_browser_urls'][i]:
-            self.Data_properties['RHESSI_browser_urls'][i] = address
-        if opent:
-            webbrowser.open_new_tab(address)
-            
-def convert_goes2flux(goes_class):
-    '''Converts Goes class to flux value, for either a single value or list of values'''
-    flux = -1
-    if type(goes_class) == list:
-        flux=[]
-        for item in goes_class:
+    def open_in_RHESSI_browser(self, opent=False):
+        import webbrowser
+        browserurl = 'http://sprg.ssl.berkeley.edu/~tohban/browser/?show=grth1+qlpcr+qlpg9+qli02+qli03+qli04+synff&date=' #20120917&time=061500'
+        #subfolders by year, month,day (except 2001)
+        #warn if you're opening more than 20 tabs
+        if opent == True and len(self.ID) > 20:
+            ans = raw_input('You are about to open ' + str(len(self.ID)) + ' tabs! Are you sure?')
+            if ans != 'Y':
+                opent = False        
+        for i,dt in enumerate(self.Datetimes['Messenger_datetimes']):
             try:
-                val=item[0:1]
-                if item.endswith('*'):
-                    item = item[:-1]
+                address=browserurl + dt.strftime('%Y%m%d') + '&time=' +dt.strftime('%H%M%S')
+            except AttributeError: #datetime for RHESSI is empty
+                address=browserurl + self.Datetimes['Messenger_datetimes'][i].strftime('%Y%m%d') + '&time=' +self.Datetimes['Messenger_datetimes'][i].strftime('%H%M%S')
+            if not self.Data_properties['RHESSI_browser_urls'][i]:
+                self.Data_properties['RHESSI_browser_urls'][i] = address
+            if opent:
+                webbrowser.open_new_tab(address)
+            
+    def convert_goes2flux(goes_class):
+        '''Converts Goes class to flux value, for either a single value or list of values'''
+        flux = -1
+        if type(goes_class) == list:
+            flux=[]
+            for item in goes_class:
+                try:
+                    val=item[0:1]
+                    if item.endswith('*'):
+                        item = item[:-1]
+                    if val == 'A':
+                        flux.append(float(item[1:])*10**-8)
+                    if val == 'B':
+                        flux.append(float(item[1:])*10**-7)
+                    if val == 'C':
+                        flux.append(float(item[1:])*10**-6)
+                    if val == 'M':
+                        flux.append(float(item[1:])*10**-5)
+                    if val == 'X':
+                        flux.append(float(item[1:])*10**-4)  
+                except TypeError:
+                    pass 
+        else:
+            try:
+                val = goes_class[0:1]
+                if goes_class.endswith('*'):
+                    goes_class = goes_class[:-1]
                 if val == 'A':
-                    flux.append(float(item[1:])*10**-8)
+                    flux = float(goes_class[1:])*10**-8
                 if val == 'B':
-                    flux.append(float(item[1:])*10**-7)
+                    flux = float(goes_class[1:])*10**-7
                 if val == 'C':
-                    flux.append(float(item[1:])*10**-6)
+                    flux = float(goes_class[1:])*10**-6
                 if val == 'M':
-                    flux.append(float(item[1:])*10**-5)
+                    flux = float(goes_class[1:])*10**-5
                 if val == 'X':
-                    flux.append(float(item[1:])*10**-4)  
+                    flux = float(goes_class[1:])*10**-4   
             except TypeError:
                 pass
-    else:
-        try:
-            val = goes_class[0:1]
-            if goes_class.endswith('*'):
-                goes_class = goes_class[:-1]
-            if val == 'A':
-                flux = float(goes_class[1:])*10**-8
-            if val == 'B':
-                flux = float(goes_class[1:])*10**-7
-            if val == 'C':
-                flux = float(goes_class[1:])*10**-6
-            if val == 'M':
-                flux = float(goes_class[1:])*10**-5
-            if val == 'X':
-                flux = float(goes_class[1:])*10**-4   
-        except TypeError:
-            pass
-    return flux
+        return flux
 
-def get_ratio(self):
-    '''Get ratio of Messenger goes v actual goes'''
-    mvals,rvals=[],[]
-    mc = self.Flare_properties["Messenger_GOES"]
-    gc=self.Flare_properties["GOES_GOES"]
-    for mval,rval in zip(mc,gc):
-        if type(rval) != float and len(rval) > 3:#:type(rval) != float : #or np.isnan(rval) == False:          
-            rf=convert_goes2flux(rval)
-            mf=convert_goes2flux(mval)
-        else:
-            rf=-1
-            mf=0
-        mvals.append(mf)
-        rvals.append(rf)
-    ratio = np.array(mvals)/np.array(rvals)
-    return ratio
+    def get_ratio(self):
+        '''Get ratio of Messenger goes v actual goes'''
+        mvals,rvals=[],[]
+        mc = self.Flare_properties["Messenger_GOES"]
+        gc=self.Flare_properties["GOES_GOES"]
+        for mval,rval in zip(mc,gc):
+            if type(rval) != float and len(rval) > 3:#:type(rval) != float : #or np.isnan(rval) == False:          
+                rf=convert_goes2flux(rval)
+                mf=convert_goes2flux(mval)
+            else:
+                rf=-1
+                mf=0
+            mvals.append(mf)
+            rvals.append(rf)
+        ratio = np.array(mvals)/np.array(rvals)
+        return ratio
+
+    def select_outliers(self, angle=85.): #greater than given angle... need to fix bug/feature with ratio
+        '''Select certain flares from the list to be examined in visually'''
+        indices,newids,newang,newmg,newgg,newn=[],[],[],[],[],[]
+        #newIDs=copy.deepcopy(self)
+        for i,flare in enumerate(self.ID):
+            if self.Angle[i] < angle:
+                newids.append(self.ID[i])    
+                newang.append(self.Angle[i])    
+                newmg.append(self.Flare_properties['Messenger_GOES'][i])    
+                newgg.append(self.Flare_properties['GOES_GOES'][i])    
+                newn.append(self.Notes[i])    
+        self.ID=newids
+        self.Angle=newang
+        self.Flare_properties['Messenger_GOES']=newmg
+        self.Flare_properties['GOES_GOES']=newgg        
+        self.Notes=newn
+
+    def plot_goes_ratio(self,title= "",ymin=0.001, ymax=100000, labels=1,ylog=True, scatter = True,cc='GOES',save=False,show=True):
+        '''make a plot of the GOEs ratio vs. angle'''
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
+        mc=self.Flare_properties["Messenger_GOES"]
+        gc=self.Flare_properties["GOES_GOES"]
+        angle=self.Angle
+        #chisq=self.isolate_att("chisq")
+        ids=self.ID
+        #dts=self.isolate_att("chisq")
+        ylabel='Messenger_GOES/Observed_GOES'
+        colors,labelang,labelratio,coordlabel,lta,ltax,ga,gax,gb,gbx,gcf,gcfx,gm,gmx,gx,gxx=[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]
+        for mval,gval,ID,ang in zip(mc,gc,ids,angle):
+            if cc=='GOES' and gval !=0.00:
+                #print np.rint(-np.log10(rval))
+                if np.rint(-np.log10(gval)) <= 4.0:
+                    colors.append('r')
+                    gx.append(mval/gval)
+                    gxx.append(ang)
+                elif np.rint(-np.log10(gval)) == 5.0:
+                    colors.append('m')
+                    gm.append(mval/gval)
+                    gmx.append(ang)
+                elif np.rint(-np.log10(gval)) == 6.0:
+                    colors.append('y')
+                    gcf.append(mval/gval)
+                    gcfx.append(ang)
+                elif np.rint(-np.log10(gval)) == 7.0:
+                    colors.append('g')
+                    gb.append(mval/gval)
+                    gbx.append(ang)
+                elif np.rint(-np.log10(gval)) == 8.0:
+                    colors.append('b')
+                    ga.append(mval/gval)
+                    gax.append(ang)
+                elif np.rint(-np.log10(gval)) == 9.0:
+                    colors.append('k')
+                    ltax.append(mval/gval)
+                    lta.append(ang)
+                else: #color code by other one
+                    if np.rint(-np.log10(mval)) <= 4.0:colors.append('r')
+                    elif np.rint(-np.log10(mval)) == 5.0:colors.append('m')
+                    elif np.rint(-np.log10(mval)) == 6.0:colors.append('y')
+                    elif np.rint(-np.log10(mval)) == 7.0:colors.append('g')
+                    elif np.rint(-np.log10(mval)) == 8.0:colors.append('b')
+                    elif np.rint(-np.log10(mval)) == 9.0:colors.append('k')
+                        
+            #labelang.append(ang) #?
+            #labelratio.append(mval/gval) #?
+            if labels==1:
+                coordlabel.append(ID)
+            else: #0 or 2
+                coordlabel.append(datetime.strftime(dt,'%D %H:%M'))
+            if scatter:
+                delta = 50
+            elif cs == '':#notes column is empty
+                delta.append(5000*10*2**np.rint(np.log10(np.abs(mval-gval)))) #difference in size between the GOES classes
+            else: #notes carries chisq value
+                delta.append(50*10*2**np.rint(np.log10(float(cs))))
+                
+        ratio = np.array(mc)/np.array(gc)
+        ratio[50]=1.00
+        ratio[72]= 1.0
+
+        rmean=1.0#np.mean(ratio)
+        rstddev=10.#np.std(ratio)
+        print rmean,rstddev
+        rstats,astats=[],[]
+        for a,r in zip(angle,ratio):
+            if r <= rmean+rstddev and r >=rmean-rstddev:
+                rstats.append(r)
+                astats.append(a)
+        
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
+        ax1.scatter(np.array(angle), ratio, s=delta, c=colors,alpha=.75)
+        fitall=np.polyfit(astats,rstats,deg=1)
+        print fitall
+        ax1.plot(np.array(astats),fitall[0] * np.array(astats) + fitall[1], color='red')
+        ax1.axhline(y=1,linestyle='dashed',color='k')
+        
+        if labels != 0: 
+            for x,y,t in zip(np.array(labelang),labelratio,coordlabel):
+                #print x,y,t
+                ax1.annotate('%s' % t, xy=(x,y), textcoords='data')
+            plt.grid()
+
+   
+        plt.xlabel('Angle between Earth and Mercury (degrees)')
+        plt.ylabel(ylabel)
+
+        if ylog:
+            ax1.set_yscale('log')
+        ax1.set_ylim([ymin,ymax])
+        ax1.set_xlim([0,90])
+        plt.title(title)
+        X = mpatches.Patch(color='red', label='X')
+        M = mpatches.Patch(color='magenta', label='M')
+        C = mpatches.Patch(color='yellow', label='C')
+        B = mpatches.Patch(color='green', label='B')
+        A= mpatches.Patch(color='blue', label='A')
+        K= mpatches.Patch(color='black', label='<A')
+        ax1.legend(handles=[X,M,C,B,A,K],loc='upper left',fontsize='medium')       
+        ax1.plot()
+        if save:
+            plt.savefig(save)
+        if show:
+            fig.show()
+                        
+        rmean=np.mean(ga)
+        rstddev=1000#np.std(ga)
+        print rmean,rstddev
+        print 'ga',len(ga),'gb',len(gb),'gc',len(gcf),'gm',len(gm),'lta',len(lta),'gx',len(gx),'total',len(ratio)
+        rstats,astats=[],[]
+        for a,r in zip(gax,ga):
+            if r <= rmean+rstddev and r >=rmean-rstddev:
+                rstats.append(r)
+                astats.append(a)
+        
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
+        ax1.scatter(np.array(gax), ga, s=delta, c='blue',alpha=.75)
+        fitall=np.polyfit(astats,rstats,deg=1)
+        print fitall
+        ax1.plot(np.array(astats),fitall[0] * np.array(astats) + fitall[1], color='blue')
+        ax1.axhline(y=1,linestyle='dashed',color='k')
+        
+        plt.xlabel('Angle between Earth and Mercury (degrees)')
+        plt.ylabel(ylabel)
+
+        if ylog:
+            ax1.set_yscale('log')
+        ax1.set_ylim([ymin,ymax])
+        ax1.set_xlim([0,90])
+        plt.title(title)
+        X = mpatches.Patch(color='red', label='X')
+        M = mpatches.Patch(color='magenta', label='M')
+        C = mpatches.Patch(color='yellow', label='C')
+        B = mpatches.Patch(color='green', label='B')
+        A= mpatches.Patch(color='blue', label='A')
+        K= mpatches.Patch(color='black', label='<A')
+        ax1.legend(handles=[X,M,C,B,A,K],loc='upper left',fontsize='medium')
+        ax1.plot()
+        if save:
+            plt.savefig(save)
+        if show:
+            fig.show()
+
+        rstats,astats=[],[]
+        rmean=10
+        rstddev=100
+        for a,r in zip(gbx,gb):
+            if r <= rmean+rstddev and r >=rmean-rstddev:
+                rstats.append(r)
+                astats.append(a)
+        
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
+        ax1.scatter(np.array(gbx), gb, s=delta, c='green',alpha=.75)
+        fitall=np.polyfit(astats,rstats,deg=1)
+        print fitall
+        ax1.plot(np.array(astats),fitall[0] * np.array(astats) + fitall[1], color='green')
+        ax1.axhline(y=1,linestyle='dashed',color='k')
+        
+        plt.xlabel('Angle between Earth and Mercury (degrees)')
+        plt.ylabel(ylabel)
+
+        if ylog:
+            ax1.set_yscale('log')
+        ax1.set_ylim([ymin,ymax])
+        ax1.set_xlim([0,90])
+        plt.title(title)
+        X = mpatches.Patch(color='red', label='X')
+        M = mpatches.Patch(color='magenta', label='M')
+        C = mpatches.Patch(color='yellow', label='C')
+        B = mpatches.Patch(color='green', label='B')
+        A= mpatches.Patch(color='blue', label='A')
+        K= mpatches.Patch(color='black', label='<A')
+        ax1.legend(handles=[X,M,C,B,A,K],loc='upper left',fontsize='medium')
+        ax1.plot()
+        if save:
+            plt.savefig(save)
+        if show:
+            fig.show()
+
+        rmean=np.mean(gcf)
+        rstddev=100.0
+        rstats,astats=[],[]
+        for a,r in zip(gcfx,gcf):
+            if r <= rmean+rstddev and r >=rmean-rstddev:
+                rstats.append(r)
+                astats.append(a)
+        
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
+        ax1.scatter(np.array(gcfx), gcf, s=delta, c='yellow',alpha=.75)
+        fitall=np.polyfit(astats,rstats,deg=1)
+        print fitall
+        ax1.plot(np.array(astats),fitall[0] * np.array(astats) + fitall[1], color='yellow')
+        ax1.axhline(y=1,linestyle='dashed',color='k')
+        
+        plt.xlabel('Angle between Earth and Mercury (degrees)')
+        plt.ylabel(ylabel)
+
+        if ylog:
+            ax1.set_yscale('log')
+        ax1.set_ylim([ymin,ymax])
+        ax1.set_xlim([0,90])
+        plt.title(title)
+        X = mpatches.Patch(color='red', label='X')
+        M = mpatches.Patch(color='magenta', label='M')
+        C = mpatches.Patch(color='yellow', label='C')
+        B = mpatches.Patch(color='green', label='B')
+        A= mpatches.Patch(color='blue', label='A')
+        K= mpatches.Patch(color='black', label='<A')
+        ax1.legend(handles=[X,M,C,B,A,K],loc='upper left',fontsize='medium')
+        ax1.plot()
+        if save:
+            plt.savefig(save)
+        if show:
+            fig.show()
+
+        rmean=np.mean(gm)
+        rstddev=1000
+        print 'gm', len(gm)
+        rstats,astats=[],[]
+        for a,r in zip(gmx,gm):
+            if r <= rmean+rstddev and r >=rmean-rstddev:
+                rstats.append(r)
+                astats.append(a)
+        
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
+        ax1.scatter(np.array(gmx), gm, s=delta, c='magenta',alpha=.75)
+        fitall=np.polyfit(astats,rstats,deg=1)
+        print fitall
+        ax1.plot(np.array(astats),fitall[0] * np.array(astats) + fitall[1], color='magenta')
+        ax1.axhline(y=1,linestyle='dashed',color='k')
+        
+        plt.xlabel('Angle between Earth and Mercury (degrees)')
+        plt.ylabel(ylabel)
+
+        if ylog:
+            ax1.set_yscale('log')
+        ax1.set_ylim([ymin,ymax])
+        ax1.set_xlim([0,90])
+        plt.title(title)
+        X = mpatches.Patch(color='red', label='X')
+        M = mpatches.Patch(color='magenta', label='M')
+        C = mpatches.Patch(color='yellow', label='C')
+        B = mpatches.Patch(color='green', label='B')
+        A= mpatches.Patch(color='blue', label='A')
+        K= mpatches.Patch(color='black', label='<A')
+        ax1.legend(handles=[X,M,C,B,A,K],loc='upper left',fontsize='medium')
+        ax1.plot()
+        if save:
+            plt.savefig(save)
+        if show:
+            fig.show()
+            
+        return angle, ratio
