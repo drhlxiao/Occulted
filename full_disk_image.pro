@@ -45,8 +45,8 @@ pixel_size=[16,16]*1,image_dim=[128,128]*1.5,xyoffset=[0,0],$
                                 ;overplot solar disk
                                 ;save file    
     if mean(im) ne 0 then begin
-        ;o->plotman,plotman_obj=p
-        ;p->create_plot_file,/png,filename=outfilename+'_det9.png'
+        o->plotman,plotman_obj=p
+        p->create_plot_file,/png,filename=outfilename+'_det9.png'
         save, im, filename=outfilename+'_det9.sav'
         ;obj_destroy,p
      endif
@@ -66,10 +66,12 @@ pixel_size=pix_size*1,image_dim=image_dim*1.5,xyoffset=xyoffset,$
                                 ;overplot solar disk
                                 ;save file    
     if mean(im) ne 0 then begin
-        o->plotman,plotman_obj=p
-        p->create_plot_file,/png,filename=outfilename+'.png'
+                                ;o->plotman,plotman_obj=p
+       o->set,im_out_fits_filename=outfilename
+       o->fitswrite
+        ;p->create_plot_file,/png,filename=outfilename+'.png'
         save, o, filename=outfilename+'_obj.sav'
-        obj_destroy,p
+        ;obj_destroy,p
      endif
     obj_destroy,o
     return,im
@@ -97,21 +99,32 @@ pro recalc_angles,flare_list,rhessi_list=rhessi_list ;add in option to see if lo
   len=size(flare_list.id,/dim)
   angles=dblarr(len[0])
   loc=strarr(len[0])
-  for i=0, len[0]-1 do begin
-      if file_search('data/bproj_vis/'+strtrim(string(flare_list.id[i]),1)+'_det9.sav') ne '' then begin
-          xyoffset=get_coords('data/bproj_vis/'+strtrim(string(flare_list.id[i]),1)+'_det9.sav')
+  for i=0,len[0]-1 do begin
           date=strmid(flare_list.datetimes.messenger_datetimes[i],0,10)
+          angles[i] = recalc_angle([0.,0.],anytim(date)); flare_list.angle[i]
+     if file_search('data/bproj_vis/'+strtrim(string(flare_list.id[i]),1)+'_det9.sav') ne '' then begin
+          ;print,'here'
+          xyoffset=get_coords('data/bproj_vis/'+strtrim(string(flare_list.id[i]),1)+'_det9.sav')
           angles[i]=recalc_angle(xyoffset,anytim(date))
-          loc[i]='['+strtrim(string(xyoffset[0]),1)+','+strtrim(string(xyoffset[1]),1) +']'
+          loc[i]='['+strtrim(string(xyoffset[0]),1)+':'+strtrim(string(xyoffset[1]),1) +']'
        endif else begin
           if keyword_set(rhessi_list) ne 0 then begin
-              print,'y'            ;stuff
+             ;print,'y'          ;stuff
+             tr=[anytim(flare_list.datetimes.messenger_datetimes[i])-1800.,anytim(flare_list.datetimes.messenger_datetimes[i])+1800.]
+             a=load_flare_list(tr)
+             loc[i]='[0,0]'             
+             if typename(a.flare_list_orig) eq 'STRUCT' then begin
+                b='['+strtrim(string(a.flare_list_orig.position[0,0]),1)+':'+strtrim(string(a.flare_list_orig.position[1,0]),1) +']'
+                loc[i] = b[0]
+                angles[i]=recalc_angle(a.flare_list_orig[0].position,anytim(date))
+              endif
           endif else begin
-              angles[i] = flare_list.angle[i]
-              loc[i]='[0,0]'
+              loc[i]='[0:0]'
        endelse
        endelse
-  endfor
+       print,loc[i],angles[i]
+    endfor
+
   flare_list.Angle=angles
   flare_list.flare_properties.location=loc
   end

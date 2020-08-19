@@ -34,7 +34,7 @@
 ;	PSH, 2013/06/02: added METHOD=2. There is a minute difference (1-2") with METHOD 1 that I should track down...
 ;
 ;-
-PRO map_oplot_limb_from_earth, map, blr=blr, factor=factor, _extra=_extra, $
+FUNCTION map_oplot_limb_from_earth, map, blr=blr, factor=factor, _extra=_extra, $
 	roll_angle_range=roll_angle_range, NEAR_SIDE_ONLY=NEAR_SIDE_ONLY, HARD_SPHERE=HARD_SPHERE, METHOD=METHOD, PSEUDO=PSEUDO
 
 	default, roll_angle_range, [0,360]
@@ -123,7 +123,8 @@ PRO map_oplot_limb_from_earth, map, blr=blr, factor=factor, _extra=_extra, $
 		ENDIF
 	ENDIF
 
-	OPLOT, xx, yy, _extra=_extra
+        OPLOT, xx, yy, _extra=_extra
+        return, [[xx],[yy]]
      END
 
 ;+
@@ -476,10 +477,10 @@ FUNCTION rsun2dist, rho
 END
 
 
-fits2map,'20130427_105530_n4eua.fts',map
+fits2map,'../../data/stereo-aia/20130427_105530_n4eua.fts',map
 loadct,9
-plot_map,map,center=[-600,200],fov=[10],/log
-map_oplot_limb_from_earth,map     
-map_oplot_limb_from_earth,map,factor=1.01
+plot_map,map,center=[-700,0],fov=[2,3],/log
+c1=map_oplot_limb_from_earth(map)   
+c2=map_oplot_limb_from_earth(map,factor=1.01)
 
 END
