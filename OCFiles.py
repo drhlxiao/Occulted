@@ -1,6 +1,6 @@
  #######################################
 # OCFiles.py
-# Erica Lastufka 17/5/17 
+# Erica Lastufka 17/5/17
 
 #Description: Class of functions to deal with all files of the study. Has to be dynamic because I expect there will be a lot of data and plot names yet to come.
 #######################################
@@ -10,7 +10,7 @@ import glob
 
 class OCFiles(object):
     ''' object will have the following attributes:
-           Naming convention 
+           Naming convention
            home directory
            subfolders
            special names (xrs, etc)
@@ -29,7 +29,7 @@ class OCFiles(object):
             gen=False
             for k in att_dict.keys():
                 setattr(self,k,att_dict[k]) #types?
-            
+
         if legacy: #get info from legacy OCData object and the associated csv/sav files
             self.dir='/Users/wheatley/Documents/Solar/occulted_flares/' #top level directory
             self.folders={'spectrograms':'data/spectrograms','lightcurves':'data/lightcurves','stereo-aia':'data/stereo-aia','stereo_pfloops':'data/stereo_pfloops','ql_images':'data/ql_images','xrs_files':'data/xrs_files','flare_lists':'flare_lists','bproj_vis':'data/bproj_vis','plots':'plots','clean':'data/clean','att_data':'data/att_data'}
@@ -81,7 +81,7 @@ class OCFiles(object):
             self.gen_lcnames(ID)
 
         #self.Notes= '' #if I need to write a note about this iteration
- 
+
     def get_index(self,ID,data):
         try:
             i= np.where(ID == np.array(data['ID']))
@@ -99,7 +99,7 @@ class OCFiles(object):
         except IndexError:
             res=''
         self.Raw['ospex']=res
-        
+
     def find_aia(self,ID,legacy=False,filename=False):
         odir=self.dir + self.folders['stereo-aia']+'/'
         res=[]
@@ -119,7 +119,7 @@ class OCFiles(object):
         res=[]
         import OCDatetimes as ocd
         from datetime import datetime as dt
-        with ocd.OCDatetimes(ID,legacy=legacy,filename=filename) as dtinst:         
+        with ocd.OCDatetimes(ID,legacy=legacy,filename=filename) as dtinst:
             oname= dt.strftime(dtinst.Messenger_peak,'%Y%m%d') +'*.fts'
         try:
             res=glob.glob(odir+oname)[0]
@@ -137,31 +137,31 @@ class OCFiles(object):
         self.Raw['messenger']=mfilename
         gfilename= '/'+str(ID)+'_GOES_lc.p' #something
         self.Raw['goes']=gfilename
-      
-    def rename2convention(self): #fix weird conventions I might have had earlier. 
+
+    def rename2convention(self): #fix weird conventions I might have had earlier.
         #first test if the file exists
         if self.test('Plots','spectrogram',ret=True) == '': #do stuff
-            ofile=self.test('Plots','spectrogram',ret=True) 
+            ofile=self.test('Plots','spectrogram',ret=True)
             date=ofile[ofile.rfind('/'):-9]#parse the filename
             nfile=ofile[:ofile.rfind('/')]+dt.strftime(date,'%Y%m%d') + 'sgram.png' #rearange the date
             os.rename(ofile,nfile)#rename file
-            
+
         if self.test('Plots','spectrogram',ret=True) == '': #next one
-            ofile=self.test('Plots','spectrogram',ret=True) 
+            ofile=self.test('Plots','spectrogram',ret=True)
             date=ofile[ofile.rfind('/'):-9]#parse the filename
             nfile=ofile[:ofile.rfind('/')]+dt.strftime(date,'%Y%m%d') + 'sgram.png' #rearange the date
-            os.rename(ofile,nfile)#rename file        
+            os.rename(ofile,nfile)#rename file
 
     def test(self,group,key,ret=False):
         fname=getattr(self,group)[key]
         import glob2
         a= glob2.glob(fullpath+'data/*/'+fname)
         if a != '':
-            print a + ' exists'
+            print(a + ' exists')
         else:
-            print a + ' does not exist!'
+            print(a + ' does not exist!')
         if ret: return a
-        
+
     def write(self, picklename=False):
         '''Write object to pickle'''
         import pickle

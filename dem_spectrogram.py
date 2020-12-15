@@ -34,16 +34,22 @@ def dem_from_sav(filename):
     dem_dict=readsav(filename,python_dict=True)
     return dem_dict
 
-def get_column(dem_dict,ninterp=100,maskzeros=True):
+def get_column(dem_dict,ninterp=100,maskzeros=True,max=False):
     '''Average over spatial dimenions and return one value per log T bin'''
     emcube=dem_dict['emcube']
     colmean=[]
     for em in emcube:
         if maskzeros:
             masked_zeros=ma.masked_less(em,0.00001)#(em == 0.0,em)
-            colmean.append(masked_zeros.mean()) #should only do this for non-zero values?
+            if max:
+                colmean.append(masked_zeros.max()) #should only do this for non-zero values?
+            else:
+                colmean.append(masked_zeros.mean())
         else:
-            colmean.append(np.mean(em))
+            if max:
+                colmean.append(np.max(em)) #should only do this for non-zero values?
+            else:
+                colmean.append(np.mean(em))
     if ninterp:
         x=np.linspace(0,20,num=ninterp)
         fEM=interp1d(range(0,21),colmean)
@@ -53,15 +59,15 @@ def get_column(dem_dict,ninterp=100,maskzeros=True):
         colEM=colmean
     return colEM
 
-def plot_em_spectrogram(demlist,picklecols=False,EMmin=26,EMmax=32,ninterp=100,maskzeros=False):
+def plot_em_spectrogram(demlist,picklecols=False,EMmin=26,EMmax=32,ninterp=100,maskzeros=False,max=True):
     '''Plot DEM time evolution as a spectrograph'''
     if not picklecols:
         EMmean=[]
         taxis=[]
         for d in demlist:
             ddict=dem_from_sav(d)
-            EMmean.append(get_column(ddict,ninterp=ninterp,maskzeros=maskzeros))
-            taxis.append(dt.strptime(d[:-4],'%Y%m%d_%H%M%S'))
+            EMmean.append(get_column(ddict,ninterp=ninterp,maskzeros=maskzeros,max=max))
+            taxis.append(dt.strptime(d[4:-9],'%Y%m%d_%H%M%S'))
             lgtaxis=ddict['lgtaxis'] #assume it's the same for all
     else:
         taxis,lgtaxis,EMmean=pickle.load(open(picklecols,'rb'))
@@ -81,7 +87,7 @@ def plot_em_spectrogram(demlist,picklecols=False,EMmin=26,EMmax=32,ninterp=100,m
     cf1=ax.imshow(np.transpose(EMmean),origin='lower')#specgram(EMmean,NFFT=21,Fs=1.0,bins=20)
     #make axis labels. default 10 per axis
     ax.set_xlim(0,np.shape(EMmean)[0])
-    ax.set_ylim(40,160)    
+    #ax.set_ylim(40,160)
     fig.canvas.draw()
     cxlabels=ax.get_xticklabels()
     xlabels=[]
@@ -97,8 +103,12 @@ def plot_em_spectrogram(demlist,picklecols=False,EMmin=26,EMmax=32,ninterp=100,m
     ax.set_xticklabels(xlabels)
     ax.set_yticklabels(ylabels)
     ax.set_ylabel('log T')
-    ax.set_xlabel('Time on '+dt.strftime(taxis[0],'%Y-%b-%d'))    
-    fig.colorbar(cf1,fraction=.01,pad=.04,label='average EM') #need to put some physical units on this!
+    ax.set_xlabel('Time on '+dt.strftime(taxis[0],'%Y-%b-%d'))
+    if max:
+        cbar_label='max EM'
+    else:
+        cbar_label='average EM'
+    fig.colorbar(cf1,fraction=.01,pad=.04,label=cbar_label) #need to put some physical units on this!
     #myFmt = DateFormatter('%H:%M')
     #ax.xaxis.set_major_formatter(myFmt)
 

@@ -294,7 +294,7 @@ def plot_fig4(levels=[[50],[50],[50],[50],[50],[50],[50]],smooth=3, linewidth=1.
     if smooth: #gaussian smooth the Halpha maps
         for cc in cmlist:
             newc.append(sunpy.map.Map(ndi.gaussian_filter(cc._maps[1].data,smooth),cc._maps[1].meta).submap(SkyCoord([-1050,-900]*u.arcsec,[150,300]*u.arcsec,frame=newc[0].coordinate_frame)))
-        print newc[0].meta['date-obs'],newc[1].meta['date-obs']
+        print( newc[0].meta['date-obs'],newc[1].meta['date-obs'])
     else:
         for c in cmlist:
             newc.append(c._maps[1])
@@ -311,7 +311,7 @@ def plot_fig4(levels=[[50],[50],[50],[50],[50],[50],[50]],smooth=3, linewidth=1.
     cmap.set_plot_settings(0,csettings)
     #cmap.set_alpha(0,.75)
 
-    print len(cmap._maps)
+    print( len(cmap._maps))
     for i in range(1,7):
         cmap.set_levels(i,levels[i],percent=True)
         cmap.set_alpha(i,1)

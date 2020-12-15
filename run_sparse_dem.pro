@@ -7,27 +7,30 @@
 ;                   sets [Dirac,sigma=0.1,sigma=0.2] instead of the
 ;                   default, which would also include sigma=0.6.
 
-function run_sparse_dem,files,submap
+function run_sparse_dem,files,submap,fov,binning
 
-    fname=strmid(files[0],8,15)
+    fname=strmid(files[0],3,16)+'bin'+strtrim(string(binning),1)
     headarr=list(length=6)
-    ;submap=[-1250,-800,0,400]   ;coords of submap
-    imgarr=fltarr(700,667,6) ;find the actual size of the map
+                                ;submap=[-1250,-800,0,400]   ;coords of submap
+    print, size(submap,/dim)
+    ;imgarr=;fltarr(arr_shape)    ;700,667,6) ;find the actual size of the map
+    ;print, size(imgarr)
     ;get headers and data, make the submap
     for i=0,5 do begin
        ;print, i
-       mreadfits,files[i],header,data
-       fits2map,files[i],map
+       ;mreadfits,files[i],header,data
+       ;fits2map,files[i],map
                                 ;for some reason still not correct header format...
        headf=headfits(files[i])
        hstruct=fitshead2struct(headf)
-       sub_map,map,smap,/plot,xrange=[submap[0],submap[1]],yrange=[submap[2],submap[3]]
-       ;plot_map,smap,/log
-       sdata=smap.data
+       ;sub_map,map,smap,/plot,xrange=[submap[0],submap[1]],yrange=[submap[2],submap[3]]
+       ;plot_map,submap[*,*,i],/log
+       ;sdata=smap.data
+       ;print, size(sdata)
        ;sdata=data[submap[0]:submap[1]-1,submap[2]:submap[3]-1]
        headarr[i]=hstruct
        ;print,headarr[i].WAVELNTH
-       imgarr[*,*,i]=sdata
+       ;imgarr[*,*,i]=submap
     endfor
 
     ;make the structure
@@ -39,7 +42,7 @@ function run_sparse_dem,files,submap
     ;   FOV             INT       Array[4]  ;coordinates of box if submap?
 
     ; Note!!! The solver assumes the third dimension (of IMG) is arranged according to [94,131,171,193,211,335]
-    s={IMG:imgarr,OINDEX:headarr,BINNING: 1 ,FOV:submap}
+    s={IMG:submap,OINDEX:headarr,BINNING: binning ,FOV:fov}
 
     ; Initialize solver.  
     ; This step builds up the response functions (which are time-dependent) and the basis functions.
@@ -86,6 +89,9 @@ function run_sparse_dem,files,submap
     if Error_status eq 0 then begin
        aia_sparse_em_solve, s.img, tolfunc=tolfunc, tolfac=1.4, oem=emcube, status=status, coeff=coeff
        print, 'done solving'
+       aia_sparse_em_em2image,emcube,image=image,status=status 
+       save, submap,emcube,status, image, coeff,lgtaxis,filename=fname+'.sav'
+       print, fname+'.sav saved to directory'
     endif else return,'solve'
     ; emcube contains the emission measure contained in each lgt bin
     ; status contains a mask indicating whether a solution was
@@ -111,6 +117,7 @@ function run_sparse_dem,files,submap
     ;print, fname
        ;save it all
        save, emcube,status,coeff,dispimage,image,lgtaxis,filename=fname+'.sav'
+       print, fname+'.sav saved to directory'
        return,1
     endif else return,'display'
       

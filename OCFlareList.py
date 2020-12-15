@@ -72,7 +72,7 @@ class OCFlareList(object):
         if not picklename:
             picklename=raw_input('What do you want to name your file? ')
         pickle.dump(self, open(picklename, 'wb'))
-        print picklename + ' was created in '+ os.getcwd()
+        print(picklename + ' was created in '+ os.getcwd())
 
     def writeIDs(self,picklename=False):
         '''Pickle flare list IDs, to make initiation faster'''
@@ -80,7 +80,7 @@ class OCFlareList(object):
         if not picklename:
             picklename=raw_input('What do you want to name your file? ')
         pickle.dump(self.isolate_att('ID'), open(picklename, 'wb'))
-        print picklename + ' was created in '+ os.getcwd()
+        print(picklename + ' was created in '+ os.getcwd())
 
     def __iter__(self):
         '''Returns a generator that iterates over the object'''
@@ -100,34 +100,46 @@ class OCFlareList(object):
     def isolate_att(self,att,key=False):
         '''Make a list of all the values of the given attribute. Either input name of attribute, or name of dictionary and keyword ie loops['length1']'''
         alist=[]
-        if hasattr(self.list[0].Datetimes,att):
+        if hasattr(self.list[99].Datetimes,att):
             for i in np.arange(0,len(self.list)): alist.append(getattr(self.list[i].Datetimes,att))
-        elif hasattr(self.list[0].Properties,att):
+        elif hasattr(self.list[99].Properties,att):
             for i in np.arange(0,len(self.list)):
                 if not key:
-                    alist.append(getattr(self.list[i].Properties,att))
+                    try:
+                        alist.append(getattr(self.list[i].Properties,att))
+                    except AttributeError:
+                        alist.append(None)
                 else:
-                    alist.append(getattr(self.list[i].Properties,att)[key])
-        elif hasattr(self.list[0].Files,att):
+                    try:
+                        alist.append(getattr(self.list[i].Properties,att)[key])
+                    except AttributeError:
+                        alist.append(None)
+        elif hasattr(self.list[99].Files,att):
             for i in np.arange(0,len(self.list)):
                 if not key:
                     alist.append(getattr(self.list[i].Files,att))
                 else:
                     alist.append(getattr(self.list[i].Files,att)[key])
-        elif hasattr(self.list[0].Observation,att):
+        elif hasattr(self.list[99].Observation,att):
             for i in np.arange(0,len(self.list)):
                 if not key:
-                    alist.append(getattr(self.list[i].Observation,att))
+                    try:
+                        alist.append(getattr(self.list[i].Observation,att))
+                    except AttributeError:
+                        alist.append(None)
                 else:
-                    alist.append(getattr(self.list[i].Observation,att)[key])
+                    try:
+                        alist.append(getattr(self.list[i].Observation,att)[key])
+                    except AttributeError:
+                        alist.append(None)
         elif att=='ID':
             for i in np.arange(0,len(self.list)):
                 alist.append(getattr(self.list[i],'ID'))
         #deal with nans
-        if type(alist[0]) == float:
-            for i,a in enumerate(alist):
-                if np.isnan(a) and type(a)==float:
-                    alist[i]=np.nan
+#         if type(alist[0]) == float:
+#             for i,a in enumerate(alist):
+#                 if np.isnan(a) and type(a)==float:
+#                     alist[i]=np.nan
         return alist
 
     def att2df(self, flattened=False):
@@ -281,7 +293,7 @@ class OCFlareList(object):
         #    new_flare_list.write()
         if retIDlist:
             return IDlist#,new_flare_list
-        print 'Generate the new flare list using: newlist=OCFlareList(IDlist)' #maybe the safest option to make sure nothing is deleted or overwritten
+        print( 'Generate the new flare list using: newlist=OCFlareList(IDlist)') #maybe the safest option to make sure nothing is deleted or overwritten
         return IDlist#new_flare_list
 
 ###################################################  LIST WIDE CALCULATIONS ##########################################################
@@ -479,7 +491,7 @@ class OCFlareList(object):
           heklist=[h for h in heklist if h.Observation.HEK_instr[0] == 'AIA']
 
       fig,ax=plt.subplots()
-      print len(heklist)
+      print(len(heklist))
       for h in heklist:
           #size proportional to ratio? if it's far from 1:1, make it bigger. color code with > or <
           loc=h.Observation.HEK_coords[0]
@@ -514,7 +526,7 @@ class OCFlareList(object):
                   color='m'
               ratio=1.0/ratio #reverse reverse
               rsun_arcsec=sunpy.sun.solar_semidiameter_angular_size(t=edt)
-              print h['coords'][:-1],euvi_hgs.x, euvi_hgs.y,(euvi_hgs.x/rsun_km)*rsun_arcsec.value,(euvi_hgs.y/rsun_km)*rsun_arcsec.value, ratio #euvi_hgs.x/rsun_km)*rsun_arcsec.value is always +ive? also euvi_hgs.x is just always +ive for some reason
+              print(h['coords'][:-1],euvi_hgs.x, euvi_hgs.y,(euvi_hgs.x/rsun_km)*rsun_arcsec.value,(euvi_hgs.y/rsun_km)*rsun_arcsec.value, ratio) #euvi_hgs.x/rsun_km)*rsun_arcsec.value is always +ive? also euvi_hgs.x is just always +ive for some reason
               ax.scatter((euvi_hgs.x/rsun_km)*rsun_arcsec.value,(euvi_hgs.y/rsun_km)*rsun_arcsec.value,marker='o',s=ratio*10,color=color)
 
 
@@ -961,12 +973,12 @@ class OCFlareList(object):
             fdatay=np.delete(fdatay,fnan[0])
 
         #ratio=datay/datax deal with this later
-        print np.shape(fdatax),np.shape(fdatay)
+        print(np.shape(fdatax),np.shape(fdatay))
         line, V =np.polyfit(fdatax,fdatay,1, cov=True)
-        print 'line of best fit: 10**('+str(line[0])+'*log10(x) + ' +str(line[1]) +')'
+        print('line of best fit: 10**('+str(line[0])+'*log10(x) + ' +str(line[1]) +')')
         #print 'residuals: ',res
-        print "x_1: {} +/- {}".format(line[0], np.sqrt(V[0][0]))
-        print "x_2: {} +/- {}".format(line[1], np.sqrt(V[1][1]))
+        print("x_1: {} +/- {}".format(line[0], np.sqrt(V[0][0])))
+        print("x_2: {} +/- {}".format(line[1], np.sqrt(V[1][1])))
         x=10**(fdatax) #assume log
         yfit = lambda x: 10**(line[0]*np.log10(x)+line[1])
         return line,x,yfit(x),V,fdatax,fdatay

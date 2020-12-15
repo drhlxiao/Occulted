@@ -1,6 +1,6 @@
  #######################################
 # OCDatetimes.py
-# Erica Lastufka 17/5/17 
+# Erica Lastufka 17/5/17
 
 #Description: Class of functions to deal with all datetimes for one flare
 #######################################
@@ -38,7 +38,7 @@ class OCDatetimes(object):
             calc_times=False
             for k in att_dict.keys():
                 setattr(self,k,att_dict[k]) #types?
-            
+
         if legacy: #get info from legacy OCData object and the associated csv/sav files
             if not filename:
                 filename= '/Users/wheatley/Documents/Solar/occulted_flares/flare_lists/list_final.csv'#default file to read
@@ -57,31 +57,31 @@ class OCDatetimes(object):
                 self.Spec_end_time=data["Spec_end_time"][i]
             except KeyError:
                 self.Spec_end_time=self.Obs_end_time
-            try:                
+            try:
                 self.lc_start_time=data["lc_start_time"][i]
             except KeyError:
                 self.lc_start_time=self.Obs_start_time
-            try:                               
+            try:
                 self.lc_end_time=data["lc_end_time"][i]
             except KeyError:
                 self.lc_end_time=self.Obs_end_time
-            try:                
+            try:
                 self.pf_loop_time=data["pf_loop_time"][i]
             except KeyError:
                 self.pf_loop_time=self.Obs_start_time
-            try:                
+            try:
                 self.stereo_start_time=data["stereo_start_time"][i]
             except KeyError:
                 self.stereo_start_time=self.Obs_start_time
-            try:                
+            try:
                 self.stereo_times=data["stereo_times"][i]
             except KeyError:
                 self.stereo_times=[self.Obs_start_time,self.Obs_end_time]
-            try:                
+            try:
                 self.Messenger_peak_long=data["Messenger_datetimes"][i]
             except KeyError:
                 self.Messenger_peak_lon=self.Messenger_peak
-            try:                
+            try:
                 self.messenger_peak_bin={'long':[data["messenger_peak_bin_start"][i],data["messenger_peak_bin_end"][i]],'short':[data["messenger_peak_bin_start"][i],data["messenger_peak_bin_end"][i]]}
             except KeyError:
                 self.messenger_peak_bin={'long':[self.Obs_start_time,self.Obs_end_time],'short':[self.Obs_start_time,self.Obs_end_time]}
@@ -102,7 +102,7 @@ class OCDatetimes(object):
         #        data=pd.read_csv(filename,sep=',', header=0) #column 0 will be NaN because it's text
         #        for key in data.keys(): #only do this if it starts with Observation
         #            setattr(self,key,data.values[0])
-        if convert:        
+        if convert:
             self.convert2datetime()
         #update the OCFiles object with the file used to generate this instance of the object
         if calc_times:
@@ -110,7 +110,7 @@ class OCDatetimes(object):
             self.calc_times(i)
             self.read_loop_time()
             self.read_stereo_times()
-        
+
     def __iter__(self):
         '''Returns a generator that iterates over the object - not sure if it's needed here but whatever'''
         for attr, value in self.__dict__.iteritems():
@@ -120,7 +120,7 @@ class OCDatetimes(object):
         return self
 
     def __exit__(self,type,value,tb):
-        print 'OCDatetimes object closed'
+        print('OCDatetimes object closed')
 
     def write(self, picklename=False):
         '''Write object to pickle'''
@@ -154,7 +154,7 @@ class OCDatetimes(object):
         last=int(data['len'][0]-1)
         self.lc_start_time= dt.strptime(data['UT'][i][0],'%d-%b-%Y %H:%M:%S.000') #let's hope everything has the same index....
         try:
-            self.lc_end_time= dt.strptime(data['UT'][i][last],'%d-%b-%Y %H:%M:%S.000') 
+            self.lc_end_time= dt.strptime(data['UT'][i][last],'%d-%b-%Y %H:%M:%S.000')
         except ValueError:
             import datetime
             self.lc_end_time = self.lc_start_time + datetime.timedelta(minutes=30)
@@ -175,7 +175,7 @@ class OCDatetimes(object):
                 self.stereo_times.append(dt.strptime(head[0]['DATE-OBS'].replace('T',' ')[:-3]+'000','%Y-%m-%d %H:%M:%S.000'))#convert to datetime
         except IndexError:
             self.stereo_times=[]
-        
+
     def read_loop_time(self,filename=False):
         '''Read map.time from STEREO fits files used to do the loop tracing. filename can be set using the OCFiles object'''
         #find the correct file
@@ -190,7 +190,7 @@ class OCDatetimes(object):
             self.pf_loop_time = dt.strptime(head[0]['DATE-OBS'].replace('T',' ')[:-3]+'000','%Y-%m-%d %H:%M:%S.000')#convert to datetime
         except IndexError:
             self.pf_loop_time = ''
-            
+
     def convert2datetime(self):
         '''If it's a string make it a datetime'''
         for a in dir(self):
@@ -209,7 +209,7 @@ class OCDatetimes(object):
                         else:
                             newd[k]=self._do_convert(val[k]) #do I have to set the attribute again after this?
                     setattr(self,a,newd)
-                    
+
     def _do_convert(self,val):
         if type(val) == dt or val is None or val == '':
             return val
@@ -273,5 +273,5 @@ class OCDatetimes(object):
                     else:
                         newlist.append(litem)
                 setattr(self,a,newlist)
-                
-            
+
+

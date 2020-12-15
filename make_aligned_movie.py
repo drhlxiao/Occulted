@@ -1,6 +1,6 @@
  #######################################
 #make_aligned_movie.py
-# Erica Lastufka 28/02/2018  
+# Erica Lastufka 28/02/2018
 
 #Description: Because jhelioviewer was down
 #######################################
@@ -42,7 +42,7 @@ def get_maps_and_headers(path,tags=False,number=False):
         maps=sunpy.map.Map(files[:number])
         headers=[sunpy.io.fits.get_header(f) for f in files[:number]]
     return maps,headers
-    
+
 def align_maps(m1,m2,a1=1,a2=1): #should m1 and m2 be the masked arrays?
     comp_map=sunpy.map.Map(m1,m2,composite=True)
     comp_map.set_alpha(0,a1)
@@ -79,7 +79,7 @@ def running_diff(maps,headers,logscale=True,lowmask=False,highmask=False):
             diff_map=difference_map(maps[j+1],m,headers[j+1],h,logscale=logscale,lowmask=lowmask,highmask=highmask)
             outmaps.append(diff_map)
     return outmaps
-    
+
 def base_diff(maps,headers,logscale=True,lowmask=False,highmask=False):
     '''make base difference map. basically a wrapper for difference_map when applied to a bunch of maps'''
     bm=maps[0]
@@ -100,7 +100,7 @@ def mask_circular(imap, radius,less=True,blue=False):
     if less:
         mask = ma.masked_less_equal(r, 1)
     else:
-        mask = ma.masked_greater_equal(r, 1)        
+        mask = ma.masked_greater_equal(r, 1)
     palette = imap.plot_settings['cmap']
     if blue:
         palette=cm.Blues
@@ -124,7 +124,7 @@ def mask_stereo_circular(imap,radius=1.5,plot=False):
 #    pl = np.percentile(map.data, plow)
 #    ph = np.percentile(map.data, phigh)
 #    im2 = exposure.rescale_intensity(masked_array, in_range=(pl, ph)) #also a masked array
-    
+
 #    return scaled_palette #returnes matplotlib.colors.**map object
 
 def process_map(imap,mask,type=False,plot=False,blue=False):
@@ -148,7 +148,7 @@ def process_map(imap,mask,type=False,plot=False,blue=False):
     #scale the color palette
     #spalette=scale_palette(ppalette)
     if plot:
-        plot_with_mask([imap],[tmask],ppalette,show=True,save=False)            
+        plot_with_mask([imap],[tmask],ppalette,show=True,save=False)
     return tmask,ppalette #scaling should be done in the Axes object?
 #################################################
 
@@ -162,7 +162,7 @@ def plot_with_mask(maplist,mask,palette,save=True,show=False):
         except AttributeError:
             #masked_map=ma.fix_invalid(m.data,mmask[0].mask)
             scaled_maps.append(sunpy.map.Map(m.data, m.meta, mask=mmask[0].mask))
-            
+
     if len(scaled_maps) > 1:
         scaled_map=align_maps(scaled_maps[0],scaled_maps[1])#[0]#align_maps(scaled_maps[0],scaled_maps[1])
     else:
@@ -183,12 +183,12 @@ def plot_with_mask(maplist,mask,palette,save=True,show=False):
         fig.show()
     if save:
         return fig
-    
+
 def sunpy2png(maplist,outname,mask=False,outpath=False,ext='png',colorbar=True,lownorm=False,highnorm=False,big=True):
     '''input to mask kward is [[list of masks], palette]'''
     if big:
         plt.figure(figsize=(16,12))
-    plt.clf()        
+    plt.clf()
     if lownorm or highnorm:
         if not lownorm:
             norm=plt.Normalize(0,highnorm)
@@ -204,9 +204,9 @@ def sunpy2png(maplist,outname,mask=False,outpath=False,ext='png',colorbar=True,l
     if not outpath:
         outpath='.'
     if colorbar:
-        plt.colorbar()            
+        plt.colorbar()
     plt.savefig(outpath+'/'+outname+ext)
-    
+
 def run_ffmpeg(imwild,mname,mdir='.',framerate=24):
     if mdir != '.':
         os.chdir(mdir)
@@ -240,7 +240,7 @@ def make_difference_movie(ddir,mtype,moviename,mdir=False,tags=False,n=False,imt
             outname='map'+imtags+'_'+'{0:03d}'.format(i)+'.'
         else:
             outname='map'+'{0:03d}'.format(i)+'.'
-        #sunpy2png([om],outname,**kwargs)            
+        #sunpy2png([om],outname,**kwargs)
         sunpy2png([om],outname,outpath=imdir,ext=ext,colorbar=colorbar,lownorm=lownorm,highnorm=highnorm,big=big)
     os.chdir(imdir)
     #if imtags:
@@ -251,8 +251,8 @@ def make_difference_movie(ddir,mtype,moviename,mdir=False,tags=False,n=False,imt
     run_ffmpeg('map'+imtags+'_%d.png',moviename)
     if not mdir:
         mdir='.'
-    print 'movie ', moviename, ' is stored in ', mdir
-    
+    print('movie ', moviename, ' is stored in ', mdir)
+
 def make_aligned_movie(dir1,dir2,moviename,tags1=False,tags2=False,n1=False,n2=False,submap=False,imdir=False,ext='png',mdir='.',framerate=24,mask1=[0,1.5],mask2=[1.5,0]):
     #get the maps
     cwd=os.getcwd()
@@ -275,19 +275,19 @@ def make_aligned_movie(dir1,dir2,moviename,tags1=False,tags2=False,n1=False,n2=F
     if not imdir:
         imdir='.'
     i=0
-    for m1,m2,mm1,mm2 in zip(maps1,maps2,masks1,masks2): #maybe do this later.... 
+    for m1,m2,mm1,mm2 in zip(maps1,maps2,masks1,masks2): #maybe do this later....
         #comp_map=align_maps(m1,m2)
         #aligned_maps.append(comp_map)
         outname='map'+str(i)+'.'
         #fig=plot_with_mask([m1,m2],[mm1[0],mm2],palette,show=False,save=False)
-        
+
         sunpy2png([m1,m2],outname, mask=[[mm1[0],mm2],palette],outpath=imdir,ext=ext)
         i+=1
     os.chdir(imdir)
     #imlist=glob.glob('*.'+ext)
     #make movie
     run_ffmpeg('map%d.'+ext,moviename,framerate=framerate)
-    print 'movie ', moviename, ' is stored in ' , mdir
+    print('movie ', moviename, ' is stored in ' , mdir)
 
-    
-    
+
+

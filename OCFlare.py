@@ -8,7 +8,7 @@
 import numpy as np
 import glob
 import pickle
-import sunpy.map
+#import sunpy.map
 from datetime import datetime as dt
 from datetime import timedelta
 import os
@@ -141,7 +141,7 @@ class OCFlare(object):
         #check if the csv file exists, if not, make it
         import glob
         if not savname[:-3]+'csv' in glob.glob('*.csv'):
-            print 'no csv file found, converting to csv first'
+            print('no csv file found, converting to csv first')
             self.export2csv(savname[:-3]+'csv')
         else:
             ans=raw_input(savname[:-3]+'csv already exists! Overwrite? (Y/N)')
@@ -167,7 +167,7 @@ class OCFlare(object):
         df=self.att2df()
         pickle.dump(df, open(path+picklename, 'wb'))
         if not silent:
-            print picklename + ' was created in '+ path
+            print(picklename + ' was created in '+ path)
 
     #############################################  DATA READING & STORAGE METHODS  #######################################################
 
@@ -374,7 +374,7 @@ class OCFlare(object):
             try: #make sure wrong count # wasn't assigned to begin with
                 if self.Properties.Messenger_GOES_long != np.max(data['highEcounts']):
                     self.Properties.Messenger_GOES_long=np.max(data['highEcounts'])
-                    print 'lowEcounts was used in Messenger_GOES_long in flare ',self.ID
+                    print('lowEcounts was used in Messenger_GOES_long in flare ',self.ID)
             except AttributeError:
                 if not high:
                     self.Properties.Messenger_GOES_long=np.max(data['lowEcounts'])
@@ -388,10 +388,10 @@ class OCFlare(object):
                 filename= '/'+str(self.ID)+'_Mess_lc.p' #something
                 self.Files.Raw['messenger']=filename
                 pickle.dump(data,open(fdir+filename,'wb'))
-                print 'File '+filename+' saved in '+fdir
+                print('File '+filename+' saved in '+fdir)
 
         else:
-            print 'No data available for flare ' + str(self.ID)
+            print('No data available for flare ' + str(self.ID))
 
         os.chdir(self.Files.dir)
         self.Datetimes.convert2datetime()
@@ -445,10 +445,10 @@ class OCFlare(object):
             filename= '/'+str(self.ID)+'_Mess_spec.p' #something
             self.Files.Raw['messenger']=filename
             pickle.dump(data,open(fdir+filename,'wb'))
-            print 'File '+filename+' saved in '+fdir
+            print('File '+filename+' saved in '+fdir)
 
         else:
-            print 'No data available for flare ' + str(self.ID)
+            print('No data available for flare ' + str(self.ID))
 
         os.chdir(self.Files.dir)
         self.Datetimes.convert2datetime()
@@ -492,7 +492,7 @@ class OCFlare(object):
                 newkey='goes_'+tag
                 self.Files.Raw.update({newkey:filename})
             pickle.dump(data,open(fdir+filename,'wb'))
-            print 'File '+filename+' saved in '+fdir
+            print('File '+filename+' saved in '+fdir)
             os.chdir(self.Files.dir)
 
 
@@ -508,10 +508,10 @@ class OCFlare(object):
                 lc= pickle.load(open(fdir+filename,'rb'))
             except EOFError:
                 self.gen_GOES_lightcurve_py()
-                print 'File '+filename+' not found in '+fdir
+                print('File '+filename+' not found in '+fdir)
                 return
         else:
-            print 'File '+filename+'is empty!'
+            print('File '+filename+'is empty!')
             return
         taxis=list(lc['taxis'])
         longflux=lc['highEflux']
@@ -571,7 +571,7 @@ class OCFlare(object):
             self.Properties.next_GOES_long_peak=np.max(data['highEflux'])
             self.Properties.next_GOES_short_peak=np.max(data['lowEflux'])
         except KeyError: #goes lightcurve could not be generated
-            print 'GOES lightcurve could not be generated for flare at ' + self.Datetimes.Messenger_peak.strftime('%Y-%m-%d %H:%M:%S')
+            print('GOES lightcurve could not be generated for flare at ' + self.Datetimes.Messenger_peak.strftime('%Y-%m-%d %H:%M:%S'))
 
     def gen_GOES_lightcurve(self, ret=False,save=True,recalc=True):
         '''Get data FROM SCRATCH aka IDL for this flare's GOES lightcurves. Save in new file if requested. Write peak flux  to object.'''
@@ -593,7 +593,7 @@ class OCFlare(object):
             d=idl.d
             idl.close()
             if d== -1:
-                print 'no data in array for flare ' + str(self.ID)
+                print('no data in array for flare ' + str(self.ID))
                 return
             Mtiml=[]
             for t in d['tarray']: Mtiml.append(dt.strptime(t,'%d-%b-%Y %H:%M:%S.%f')) #fix messenger times to datetimes
@@ -642,7 +642,7 @@ class OCFlare(object):
             filename= '/'+str(self.ID)+'_GOES_lc.p' #something
             self.Files.Raw['goes']=filename
             pickle.dump(data,open(fdir+filename,'wb'))
-            print 'File '+filename+' saved in '+fdir
+            print('File '+filename+' saved in '+fdir)
 
         os.chdir(self.Files.dir)
         #self.Datetimes.convert2datetime()
@@ -825,7 +825,7 @@ class OCFlare(object):
             fc='%d-%b-%Y %H:%M:%S.000'
             start_time=dt.strftime(start_time_dt,fc)
             end_time=dt.strftime(end_time_dt,fc)
-            print start_time,end_time
+            print(start_time,end_time)
             idl("o=ospex(/no_gui)")
             idl(".compile messenger_ospex.pro")
             idl.specfile=xrsf
@@ -953,7 +953,7 @@ class OCFlare(object):
         if files !=[]:
             smap= sunpy.map.Map(files)
             maps = {smap.instrument: smap.submap(SkyCoord((-1100, 1100) * u.arcsec, (-1100, 1100) * u.arcsec,frame=smap.coordinate_frame))} #this could be empty if files is empty
-        else: print 'No files found and no maps made!'
+        else: print('No files found and no maps made!')
 
         if save: #pickle it?
             newfname=files[files.rfind('/')+1:files.rfind('.')]+'.p'
@@ -997,7 +997,7 @@ class OCFlare(object):
                 for f in sunpy.map.Map(files):
                     maps.append({f.instrument: f.submap(SkyCoord((-1100, 1100) * u.arcsec, (-1100, 1100) * u.arcsec,frame=f.coordinate_frame))}) #this could be empty if files is empty
                 self.extract_stereo_times()
-        else: print 'No files found and no maps made!'
+        else: print('No files found and no maps made!')
 
         if save: #pickle it?
             os.chdir(path)
@@ -1063,7 +1063,7 @@ class OCFlare(object):
             try:
                 pfc_times=[dt.strptime(p[47:-10],'%Y%m%d_%H%M%S') for p in pfc_sameday]
                 in_int=[p for p in pfc_times if p > start_time and p < end_time]
-                print in_int, start_time,end_time
+                print(in_int, start_time,end_time)
                 if len(in_int) > 0:
                     self.Files.prepped['stereo-preflare']=pfc_sameday[pfc_times.index(in_int[0])]
                 return
@@ -1273,7 +1273,7 @@ class OCFlare(object):
                 self.Files.prepped={'stereo-l1':preppedglob,'stereo-peak':'','stereo-preflare':preppedglob[0]}
 
             if clean: #delete all the files that aren't the peak or the preflare image
-                print 'clean not enabled yet'
+                print('clean not enabled yet')
         else:
              self.Files.prepped={'stereo-l1':'','stereo-peak':'','stereo-preflare':''}
 
@@ -1332,11 +1332,11 @@ class OCFlare(object):
         try:
             stereo_loc= self.Properties.stereo_loc #HGS (stereo)
         except AttributeError:
-            print 'foo'
+            print('foo')
         try:
             hek=self.Properties.HEK_coords #HGS (earth, since it's always AIA or GOES)
         except AttributeError:
-            print 'foo'
+            print('foo')
 
     def convert_coords_aia2stereo(self,map_aia=True,map_stereo=True,quiet=True,wave='304'):
         '''convert Properties.source_pos_disk to Properties.source_pos_STEREO for a given AIA and STEREO map'''
@@ -1403,8 +1403,8 @@ class OCFlare(object):
         hkm=Rsun*(1-np.cos(angd))/np.cos(angd)
         angda=np.radians((self.Properties.e2['distance2limb'].value-30.)/arcsec2deg)
         hkma=Rsun*(1-np.cos(angda))/np.cos(angda)
-        print 'Projection effect of ',str(hkm), ' km, ', str(self.Properties.e2['distance2limb'].value/arcsec2deg) , ' degrees behind limb'
-        print 'Adjusted projection effect of ',str(hkma), ' km', str((self.Properties.e2['distance2limb'].value-30.)/arcsec2deg) , ' degrees behind limb'
+        print('Projection effect of ',str(hkm), ' km, ', str(self.Properties.e2['distance2limb'].value/arcsec2deg) , ' degrees behind limb')
+        print('Adjusted projection effect of ',str(hkma), ' km', str((self.Properties.e2['distance2limb'].value-30.)/arcsec2deg) , ' degrees behind limb')
         self.Properties.e5={'hkm':hkm,'angd':angd,'hkma':hkma,'angda':angda}
 
     def get_stereo_flare_loc(self):
@@ -1677,14 +1677,14 @@ class OCFlare(object):
         try:
             if np.isnan(flare_locHEK.lon.value):
                 flare_loc=flare_locEUV
-                print flare_locHEK, ' longitude is nan! Using EUV event if available ', flare_locEUV
+                print( flare_locHEK, ' longitude is nan! Using EUV event if available ', flare_locEUV)
             else:
                 flare_loc=flare_locHEK
         except UnboundLocalError:
             try:
                 flare_loc=flare_locEUV
             except UnboundLocalError:
-                print 'no flare locations found!'
+                print('no flare locations found!')
                 self.Properties.GMobs_with_gloc=False
                 self.Properties.MAobs_with_gloc=False
                 self.Properties.MBobs_with_gloc=False
@@ -1756,9 +1756,9 @@ class OCFlare(object):
 
 
         if verb:
-            print 'flon', flon, [np.sin(np.deg2rad(flon)),np.cos(np.deg2rad(flon))]
-            print 'vfov', vfov
-            print 'vlimb',vlimb
+            print( 'flon', flon, [np.sin(np.deg2rad(flon)),np.cos(np.deg2rad(flon))])
+            print( 'vfov', vfov)
+            print( 'vlimb',vlimb)
 
     def GMobs_with_loc(self):
         '''Take the location from AIA if it's available from HEK? (right now this is just a copy of GSobs_with_sloc?'''
@@ -1968,7 +1968,7 @@ class OCFlare(object):
 
         if all_wave:
             maps = [self.get_AIA(wave=w) for w in ['171','193','304']]
-            print maps.keys()
+            print(maps.keys())
             fig = plt.figure(figsize=(len(maps)*3, 5))
         if not zoom:
             p=m.wcs
@@ -1981,7 +1981,7 @@ class OCFlare(object):
                     ax = fig.add_subplot(1,len(maps),i+1, projection=p) #do the math
                     mm=maps[i][maps.keys()[0]] #I think
                     mm.plot(axes=ax)
-                print maps.keys()
+                print(maps.keys())
 
         if zoom: #zoom to a rectangle centered on source_pos
             width=400.*u.arcsec
@@ -2033,7 +2033,7 @@ class OCFlare(object):
                     m0=copy.deepcopy(maps[i-1]['SECCHI'])
                     md=copy.deepcopy(m)
                     m.data=md.data-m0.data #can I add color scaling somehow?
-                    print i, i-1
+                    print(i, i-1)
 
             if not zoom:
                 p=m.wcs
@@ -2080,7 +2080,7 @@ class OCFlare(object):
                 hgs = coords.transform_to('heliographic_stonyhurst')
                 hgs.D0 = m.dsun
                 hgs._rsun=m.rsun_meters
-                print hgs._rsun
+                print(hgs._rsun)
                 if np.mean(m.heliographic_longitude) >0:
                     hgs.L0 = m.heliographic_longitude#+1*u.arcsec #add back the 1 arcsec
                 else:
@@ -2121,7 +2121,7 @@ class OCFlare(object):
                 sc=SkyCoord(scs[0],scs[1],frame=pmap.coordinate_frame)
                 ax.plot_coord(sc, color='r',marker='o',markersize=10) #might need to make it bigger
                 #ax.plot([self.Properties.source_pos_STEREO[0]],[self.Properties.source_pos_STEREO[1]],marker='o',markersize=10,color='red',projection=p)
-                print self.Properties.source_pos_STEREO
+                print(self.Properties.source_pos_STEREO)
 
             #pmap.plot(axes=ax)
 
@@ -2165,8 +2165,8 @@ class OCFlare(object):
             ax.plot([sp.x, point_on_line.x], [sp.y, point_on_line.y], color='red', marker='o', scalex=False, scaley=False)
             fig.canvas.draw()
             plt.show()
-        print 'coordinates of closest point on AIA limb: ', list(point_on_line.coords)[0]
-        print 'distance to closest point on AIA limb: ', distance
+        print('coordinates of closest point on AIA limb: ', list(point_on_line.coords)[0])
+        print( 'distance to closest point on AIA limb: ', distance)
         self.Properties.e2={'distance2limb':distance,'coordsonlimb': list(point_on_line.coords)[0]}
 
         return list(point_on_line.coords)[0]
@@ -2229,7 +2229,7 @@ class OCFlare(object):
         for a in afitsfiles:
             if wave in a:
                 aa=a
-                print aa
+                print( aa)
         if not aa:
             aa=afitsfiles[0]
 
@@ -2269,7 +2269,7 @@ class OCFlare(object):
             idl.j=j
             for i,r in enumerate(rfitsfiles):
                 if estr in r:
-                    print r
+                    print( r)
                     idl.rfiles=r
                     #color=i*75
                     idl.i=i
@@ -2280,7 +2280,7 @@ class OCFlare(object):
                     #    color=16
                     #    idl.color=color
                     #    #idl("color=cgcolor(White)")
-                    print i,all_erange[i],ee,idl.color
+                    print( i,all_erange[i],ee,idl.color)
                     #colors.append(int(color))
                     labels.append(estr+' keV')
                     idl('fits2map,rdir+rfiles,rmap')

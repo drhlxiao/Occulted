@@ -24,6 +24,7 @@ from scipy.io import readsav
 from scipy import ndimage as ndi
 import astropy.units as u
 from astropy.coordinates import SkyCoord
+import make_aligned_movie as mov
 
 #global emcube
 #global lgtaxis
@@ -60,8 +61,8 @@ def plot_whole_cube(dem_dict=True,picklename=False,meta=False,lgtaxis=False,exte
             data=emcube[n,:,:]
             data=np.ma.masked_less(data,0.00001)
             mmap=sunpy.map.Map(data,meta)
-            if extent:
-                mmap=mmap.submap(SkyCoord(extent[0]*u.arcsec,extent[1]*u.arcsec),SkyCoord(extent[2]*u.arcsec,extent[3]*u.arcsec))
+            if type(extent) == list:
+                mmap=mmap.submap(SkyCoord(extent[0]*u.arcsec,extent[2]*u.arcsec,frame=mmap.coordinate_frame),SkyCoord(extent[1]*u.arcsec,extent[3]*u.arcsec,frame=mmap.coordinate_frame))
             mapcube.append(mmap)
             mins.append(mmap.min())
             maxs.append(mmap.max())
@@ -106,7 +107,7 @@ def get_max_T_EM(vec,lgtaxis):
     maxx=vec.tolist().index(maxem)
     maxt=lgtaxis[maxx]
     return maxt,maxem
-
+    
 def plot_T_EM_simple(dem_dict,tm=False,emm=False,test=False,meta=False,lgtaxis=False,extent=False,tmin=False,EMrange=False,Trange=False,EMonly=False,plotname=False,gauss=False,plot=True):
     '''Make maps showing the max T and EM for each pixel in emcube. No bells and whistles'''
     #first test for a single pixel
@@ -147,6 +148,7 @@ def plot_T_EM_simple(dem_dict,tm=False,emm=False,test=False,meta=False,lgtaxis=F
         if not tmin:
             norm1=colors.Normalize(vmin=np.min(plotTmap),vmax=np.max(plotTmap))
         else:
+            plotTmap.data=np.ma.masked_less(plotTmap.data,tmin)
             norm1=colors.Normalize(vmin=tmin,vmax=np.max(plotTmap))        
         norm2=colors.Normalize(vmin=np.min(plotEMmap),vmax=np.max(plotEMmap))
 
@@ -185,6 +187,9 @@ def plot_T_EM_simple(dem_dict,tm=False,emm=False,test=False,meta=False,lgtaxis=F
         sEMmap=emm
     norm1=colors.Normalize(vmin=np.min(lgtaxis[0]),vmax=np.max(sTmap.data))
     if EMrange:
+        #mask below
+        mdata=np.ma.masked_less(sEMmap.data,EMrange[0])
+        sEMmap=sunpy.map.Map(mdata,sEMmap.meta)
         norm2=colors.Normalize(vmin=EMrange[0],vmax=EMrange[1])
     else:
         norm2=colors.Normalize(vmin=np.min(sEMmap.data),vmax=np.max(sEMmap.data))
@@ -200,8 +205,8 @@ def plot_T_EM_simple(dem_dict,tm=False,emm=False,test=False,meta=False,lgtaxis=F
 
     elif plot:
         fig,ax=plt.subplots(1,2,sharex=True,sharey=True,figsize=(12,6))
-        cf1=sTmap.plot(cmap=cm.rainbow,norm=norm1,axes=ax[0],extent=extent)
-        cf2=sEMmap.plot(cmap=cm.rainbow,norm=norm2,axes=ax[1],extent=extent)
+        cf1=sTmap.plot(cmap=cm.rainbow,norm=norm1,axes=ax[0])#,extent=extent)
+        cf2=sEMmap.plot(cmap=cm.rainbow,norm=norm2,axes=ax[1])#,extent=extent)
         for a in ax:
             a.xaxis.label.set_visible(False)
             a.yaxis.label.set_visible(False)
@@ -249,7 +254,7 @@ def plot_T_EM(dem_dict,tm=False,emm=False,test=False,meta=False,lgtaxis=False,ex
         maxv=np.max(vec)
         maxx=vec.tolist().index(maxv)
         maxt=lgtaxis[maxx]
-        print sx,sy,maxv,maxx,maxt
+        print( sx,sy,maxv,maxx,maxt)
     if not tm and not emm:    
         #make whole map
         maxTmap=np.zeros(np.shape(np.transpose(status)))
@@ -318,7 +323,7 @@ def plot_T_EM(dem_dict,tm=False,emm=False,test=False,meta=False,lgtaxis=False,ex
         maxv=np.max(vec)
         maxx=vec.tolist().index(maxv)
         maxt=lgtaxis[maxx]
-        print xpix,ypix,maxv,maxt,vec
+        print( xpix,ypix,maxv,maxt,vec)
 
     def onclick(event):
         if event.dblclick:
@@ -423,7 +428,7 @@ def plot6(dem_dict, extent=False,maxval=False,minval=False,logscale=False,lgtaxi
         #convert to map
         smap=sunpy.map.Map(immasked,meta)
         if extent:
-            print extent
+            print( extent)
             smap=smap.submap(SkyCoord(extent[0]*u.arcsec,extent[1]*u.arcsec),SkyCoord(extent[2]*u.arcsec,extent[3]*u.arcsec))
         cf=smap.plot(cmap=cm.rainbow,norm=norm)
         ax.xaxis.label.set_visible(False)
@@ -444,8 +449,8 @@ def maxEM_movie(savfiles,moviename,framerate=False,EMrange=False,extent=False,ga
     for i,s in enumerate(savfiles):
         dem_dict=dem_from_sav(s)
         #get map metadata from fits
-        rootname=s[:-4]
-        fitsname=glob.glob('AIA_*'+rootname+'.fits')[0]
+        rootname=s[4:-4]
+        fitsname=glob.glob('AIA'+rootname+'*.fits')[0]
         fmap=sunpy.map.Map(fitsname)
         if gauss:
             names='maxEM_gauss'+str(gauss)+'_'
@@ -513,49 +518,49 @@ def maxEM_Fe18_movie(savfiles,sidx,eidx,moviename,framerate=12,EMrange=False,ext
     #run ffmpeg
     mov.run_ffmpeg(names+'%03d.png',moviename,framerate=framerate)
 
- def maxEM_maxT_movie(savfiles,sidx,eidx,moviename,framerate=12,EMrange=False,Trange=False,extent=False,gauss=4):
-    '''make a movie showing where the max EM is'''
-    for i,s in enumerate(savfiles):
-        dem_dict=dem_from_sav(s)
-        #get map metadata from fits
-        rootname=s[:-4]
-        fitsname=glob.glob('AIA_*'+rootname+'.fits')[0]
-        fmap=sunpy.map.Map(fitsname)
-        if gauss:
-            names='maxEM_maxT_gauss'+str(gauss)+'_'
-            plotname=names+'{0:03d}'.format(i)+'.png'
-        else:
-            names='maxEM_maxT_'
-            plotname=names+'{0:03d}'.format(i)+'.png'
-        plt.clf()
-        Tplot,EMplot=plot_T_EM_simple(dem_dict,meta=fmap.meta,lgtaxis=dem_dict['lgtaxis'],extent=extent,EMrange=EMrange,Trange=Trange,plotname=False,EMonly=True,gauss=gauss,plot=False)
-        #plot stuff
-        fig,[ax1,ax2]=plt.subplots(ncols=2,figsize=(10,6))
-        #ax1=fig.add_subplot(2,1,1)
-        #map18.plot(axes=ax1)
-        norm1=colors.Normalize(vmin=Trange[0],vmax=Trange[1])
-        ax1.xaxis.label.set_visible(False)
-        ax1.yaxis.label.set_visible(False)
-        ax1.title.set_visible(False)
-        #ax1.set(aspect=.55)
-        cf1=Tplot.plot(cmap=cm.rainbow,norm=norm1,axes=ax1)
-        norm2=colors.Normalize(vmin=EMrange[0],vmax=EMrange[1])
-        #ax2=fig.add_subplot(2,1,2)
-        cf2=EMplot.plot(cmap=cm.rainbow,norm=norm2,axes=ax2)
-        ax2.xaxis.label.set_visible(False)
-        ax2.yaxis.label.set_visible(False)
-        ax2.title.set_visible(False)
-        #ax2.set_ylim([0,400])
-        #ax2.set(aspect=1.15)
-        #ax2.set_title('Max Emission Measure (Log $cm^{-5}$) '+fmap.meta['date-obs'][11:-3])
-        plt.subplots_adjust(bottom=0.1, right=0.9, top=0.9)
-        #cax = plt.axes([0.85, 0.1, 0.075, 0.8])
-        fig.colorbar(cf2,ax=ax2,fraction=.05,pad=.09)
-        fig.colorbar(cf1,ax=ax1,fraction=.05,pad=.09)        #fig.tight_layout()
-        plt.suptitle(fmap.meta['date-obs'][11:-3])
-        #fig.subplots_adjust(wspace=0.4)
-        plt.savefig(names+'{0:03d}'.format(i)+'.png')
-        #save
-        
-    #run ffmpeg
-    mov.run_ffmpeg(names+'%03d.png',moviename,framerate=framerate)   
+    def maxEM_maxT_movie(savfiles,moviename,framerate=12,EMrange=False,Trange=False,extent=False,gauss=4):
+        '''make a movie showing where the max EM is'''
+        for i,s in enumerate(savfiles):
+            dem_dict=dem_from_sav(s)
+            #get map metadata from fits
+            rootname=s[:-4]
+            fitsname=glob.glob('AIA_*'+rootname+'.fits')[0]
+            fmap=sunpy.map.Map(fitsname)
+            if gauss:
+                names='maxEM_maxT_gauss'+str(gauss)+'_'
+                plotname=names+'{0:03d}'.format(i)+'.png'
+            else:
+                names='maxEM_maxT_'
+                plotname=names+'{0:03d}'.format(i)+'.png'
+            plt.clf()
+            Tplot,EMplot=plot_T_EM_simple(dem_dict,meta=fmap.meta,lgtaxis=dem_dict['lgtaxis'],extent=extent,EMrange=EMrange,Trange=Trange,plotname=False,EMonly=True,gauss=gauss,plot=False)
+            #plot stuff
+            fig,[ax1,ax2]=plt.subplots(ncols=2,figsize=(10,6))
+            #ax1=fig.add_subplot(2,1,1)
+            #map18.plot(axes=ax1)
+            norm1=colors.Normalize(vmin=Trange[0],vmax=Trange[1])
+            ax1.xaxis.label.set_visible(False)
+            ax1.yaxis.label.set_visible(False)
+            ax1.title.set_visible(False)
+            #ax1.set(aspect=.55)
+            cf1=Tplot.plot(cmap=cm.rainbow,norm=norm1,axes=ax1)
+            norm2=colors.Normalize(vmin=EMrange[0],vmax=EMrange[1])
+            #ax2=fig.add_subplot(2,1,2)
+            cf2=EMplot.plot(cmap=cm.rainbow,norm=norm2,axes=ax2)
+            ax2.xaxis.label.set_visible(False)
+            ax2.yaxis.label.set_visible(False)
+            ax2.title.set_visible(False)
+            #ax2.set_ylim([0,400])
+            #ax2.set(aspect=1.15)
+            #ax2.set_title('Max Emission Measure (Log $cm^{-5}$) '+fmap.meta['date-obs'][11:-3])
+            plt.subplots_adjust(bottom=0.1, right=0.9, top=0.9)
+            #cax = plt.axes([0.85, 0.1, 0.075, 0.8])
+            fig.colorbar(cf2,ax=ax2,fraction=.05,pad=.09)
+            fig.colorbar(cf1,ax=ax1,fraction=.05,pad=.09)        #fig.tight_layout()
+            plt.suptitle(fmap.meta['date-obs'][11:-3])
+            #fig.subplots_adjust(wspace=0.4)
+            plt.savefig(names+'{0:03d}'.format(i)+'.png')
+            #save
+            
+        #run ffmpeg
+        mov.run_ffmpeg(names+'%03d.png',moviename,framerate=framerate)
