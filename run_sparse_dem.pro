@@ -7,6 +7,7 @@
 ;                   sets [Dirac,sigma=0.1,sigma=0.2] instead of the
 ;                   default, which would also include sigma=0.6.
 
+
 function run_sparse_dem,files,submap,fov,binning
 
     fname=strmid(files[0],3,16)+'bin'+strtrim(string(binning),1)
@@ -31,7 +32,7 @@ function run_sparse_dem,files,submap,fov,binning
        headarr[i]=hstruct
        ;print,headarr[i].WAVELNTH
        ;imgarr[*,*,i]=submap
-    endfor
+
 
     ;make the structure
     ;** Structure MS_259678195004, 4 tags, length=5771872, data length=5771518:
@@ -42,6 +43,7 @@ function run_sparse_dem,files,submap,fov,binning
     ;   FOV             INT       Array[4]  ;coordinates of box if submap?
 
     ; Note!!! The solver assumes the third dimension (of IMG) is arranged according to [94,131,171,193,211,335]
+
     s={IMG:submap,OINDEX:headarr,BINNING: binning ,FOV:fov}
 
     ; Initialize solver.  
@@ -89,9 +91,11 @@ function run_sparse_dem,files,submap,fov,binning
     if Error_status eq 0 then begin
        aia_sparse_em_solve, s.img, tolfunc=tolfunc, tolfac=1.4, oem=emcube, status=status, coeff=coeff
        print, 'done solving'
+
        aia_sparse_em_em2image,emcube,image=image,status=status 
        save, submap,emcube,status, image, coeff,lgtaxis,filename=fname+'.sav'
        print, fname+'.sav saved to directory'
+
     endif else return,'solve'
     ; emcube contains the emission measure contained in each lgt bin
     ; status contains a mask indicating whether a solution was

@@ -253,7 +253,7 @@ def str_to_SkyCoord(in_str): #for when restoring from json etc
     #sc_out.observer.lat=lat
     #sc_out.observer.radius=radius
 
-return sc_out
+    return sc_out
 
 def flux_from_box(smap,bottom_left,top_right,mask=False, maps=False, expnorm=True):
     ssmap=smap.submap(bottom_left,top_right)
@@ -267,7 +267,7 @@ def flux_from_box(smap,bottom_left,top_right,mask=False, maps=False, expnorm=Tru
         flux=np.ma.sum(data)
     if maps:
         newmap=sunpy.map.Map(data,ssmap.meta)
-        newmap.peek()
+        #newmap.peek()
         return flux,data,newmap
     return flux,data
 
@@ -372,13 +372,19 @@ def fit_to_mask(s,bl_rot,tr_rot,mask):
     return flux,data,newmap
     #return bl_rot,tr_rot,maskt
 
-def track_region_box(submaps, circle, xoff=0.,yoff=0.,start_idx=0,bin=False, mask=False, plot=False, expnorm=True):
+def track_region_box(submaps, circle=False, xoff=0.,yoff=0.,start_idx=0,bin=False, mask=False, plot=False, expnorm=True):
     '''add binning option, return timestamps too for greater ease'''
     map0=submaps[0]
     start_time = map0.meta['date-obs']
     timestamps=[]#[start_time]
-    bl=SkyCoord(np.min(circle.Tx)+xoff*u.arcsec,np.min(circle.Ty)+yoff*u.arcsec,frame=map0.coordinate_frame) #note the +10!
-    tr=SkyCoord(np.max(circle.Tx)+xoff*u.arcsec,np.max(circle.Ty)+yoff*u.arcsec,frame=map0.coordinate_frame)
+    
+    if circle:
+        bl=SkyCoord(np.min(circle.Tx)+xoff*u.arcsec,np.min(circle.Ty)+yoff*u.arcsec,frame=map0.coordinate_frame) #note the +10!
+        tr=SkyCoord(np.max(circle.Tx)+xoff*u.arcsec,np.max(circle.Ty)+yoff*u.arcsec,frame=map0.coordinate_frame)
+    else: #take it from first map... although then you're gonna get some zeros later on?
+        bl=map0.bottom_left_coord
+        tr=map0.top_right_coord
+        
     bl.set_obstime=start_time
     tr.set_obstime=start_time
     bwidth=tr.Tx-bl.Tx

@@ -27,7 +27,9 @@ from astropy.coordinates import SkyCoord
 import zipfile
 import pidly
 from datetime import datetime as dt
+
 from skimage.transform import downscale_local_mean
+
 
 def dem_from_sav(filename):
     dem_dict=readsav(filename,python_dict=True)
@@ -63,12 +65,17 @@ def group6(files):
     fdict={'094':[],'131':[],'171':[],'193':[],'211':[],'335':[]}
     wavelengths=['094','131','171','193','211','335']
     for f in files:
-        try:
-            ttag=dt.strptime(f[8:-5],'%Y%m%d_%H%M%S')
-            wave=f[4:7]
-        except ValueError:
-            ttag=dt.strptime(f[4:-10],'%Y%m%d_%H%M%S')
-            wave=f[-8:-5]
+
+        #try:
+        #    ttag=dt.strptime(f[8:-5],'%Y%m%d_%H%M%S')
+        #    wave=f[4:7]
+        #except ValueError:
+        #    ttag=dt.strptime(f[4:-10],'%Y%m%d_%H%M%S')
+        #    wave=f[-8:-5]
+
+        ttag=dt.strptime(f[8:-5],'%Y%m%d_%H%M%S')
+        wave=f[4:7]
+
         tdict={'filename':f,'time':ttag,'closest_files':[],'tds':[],'group_id':0}
         fdict[wave].append(tdict)
         #find the closest files in other wavelengths
@@ -96,6 +103,7 @@ def find_closest_file(ttag,fdict,wave='094'):
     #return corresponding filename... figure out a way to return timedelta as well
     return closest_file
         
+
 def bin_images(gdat,n=2):
     ''' spatially bin images in n x n bins, crop array if it doesnt fit.g6 is list of file names in order[94,131,171,193,211,335] '''
     g6_binned=[]
@@ -123,6 +131,7 @@ def run_sparse_dem(group,fov,binning=False):
         binfac=float(binning)*.3
     else:
         submap=np.array(gdat)
+
     idl = pidly.IDL('/Users/wheatley/Documents/Solar/sswidl_py.sh')
     idl('.compile /Users/wheatley/Documents/Solar/DEM/tutorial_dem_webinar/aia_sparse_em_init.pro')
     idl('.compile /Users/wheatley/Documents/Solar/occulted_flares/code/run_sparse_dem.pro')
@@ -135,9 +144,12 @@ def run_sparse_dem(group,fov,binning=False):
         idl('result=run_sparse_dem(group6, submap,fov,binning)')
     else:
         idl('result=run_sparse_dem(group6, submap,fov,1)')
+
     result=idl.result
     #get out the result
     return result 
+
+
 
 #if __name__ == '__main__':
 #    os.chdir('low_cadence_cutout')
